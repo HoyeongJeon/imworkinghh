@@ -56,4 +56,12 @@ describe('자동 백업 저장소', () => {
     await writeFile(join(backupDirectory, 'current.json'), '{"content": 1}')
     expect(await createBackupStore(backupDirectory).read()).toBeNull()
   })
+
+  it('쓰는 중에 지우라고 하면 쓰기가 끝난 뒤에 지워서 백업이 남지 않는다', async () => {
+    const store = createBackupStore(join(directory, 'backup'))
+    const writing = store.write(sampleBackup)
+    await store.clear()
+    await writing
+    expect(await store.read()).toBeNull()
+  })
 })
