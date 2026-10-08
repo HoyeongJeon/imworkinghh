@@ -1,0 +1,17 @@
+export const IpcChannel = {
+  loadSettings: 'settings:load',
+  saveSettings: 'settings:save',
+  openFileDialog: 'file:open-dialog',
+  openPath: 'file:open-path',
+  saveFile: 'file:save',
+  confirmDiscard: 'dialog:confirm-discard',
+  askRestoreBackup: 'dialog:ask-restore-backup',
+  readBackup: 'backup:read',
+  writeBackup: 'backup:write',
+  clearBackup: 'backup:clear',
+  closeRequested: 'window:close-requested',
+  requestClose: 'window:request-close',
+  closeNow: 'window:close-now',
+  minimize: 'window:minimize',
+  toggleMaximize: 'window:toggle-maximize',
+} as const
