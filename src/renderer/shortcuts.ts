@@ -11,11 +11,13 @@ export const APP_SHORTCUTS = {
   decreaseFontSize: 'Mod+-',
 } as const
 
-export type KeyPress = Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'isComposing'>
+export type KeyPress = Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'isComposing' | 'keyCode'>
 
 export type ParsedShortcut = { code: string; mod: boolean; ctrl: boolean; cmd: boolean; shift: boolean; alt: boolean }
 
 export type ShortcutBinding = { combo(): string | null; run(): void }
+
+const IME_PROCESSING_KEY_CODE = 229
 
 const KNOWN_MODIFIERS = new Set(['mod', 'ctrl', 'cmd', 'shift', 'alt'])
 
@@ -64,7 +66,8 @@ export function isUsableAppShortcut(combo: string): boolean {
 }
 
 export function matchesShortcut(press: KeyPress, combo: string, platform: string): boolean {
-  if (press.isComposing) return false
+  // 일부 IME는 조합을 시작하는 첫 keydown에서 isComposing 대신 keyCode 229만 보낸다.
+  if (press.isComposing || press.keyCode === IME_PROCESSING_KEY_CODE) return false
   const shortcut = parseShortcut(combo)
   if (!shortcut) return false
   const isMac = platform === 'darwin'

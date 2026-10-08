@@ -16,6 +16,7 @@ const press = (overrides: Partial<KeyPress>): KeyPress => ({
   shiftKey: false,
   altKey: false,
   isComposing: false,
+  keyCode: 83,
   ...overrides,
 })
 
@@ -44,6 +45,10 @@ describe('단축키', () => {
 
   it('한글 조합 중에는 단축키가 반응하지 않는다', () => {
     expect(matchesShortcut(press({ ctrlKey: true, isComposing: true }), 'Mod+S', 'win32')).toBe(false)
+  })
+
+  it('조합 시작 신호(keyCode 229)가 오면 isComposing이 꺼져 있어도 반응하지 않는다', () => {
+    expect(matchesShortcut(press({ ctrlKey: true, keyCode: 229 }), 'Mod+S', 'win32')).toBe(false)
   })
 
   it('알 수 없는 키나 보조키 이름은 조합으로 인정하지 않는다', () => {
