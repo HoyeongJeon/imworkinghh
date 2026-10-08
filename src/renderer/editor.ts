@@ -46,6 +46,12 @@ function highlightExtensions(enabled: boolean): Extension {
   return [markdown({ base: markdownLanguage, codeLanguages: languages }), syntaxHighlighting(markdownHighlightStyle)]
 }
 
+const DEFAULT_FONT_SIZE_PX = 14
+
+function fontSizeTheme(px: number): Extension {
+  return EditorView.theme({ '&': { fontSize: `${px}px` } })
+}
+
 function cursorPosition(state: EditorState): CursorPosition {
   const head = state.selection.main.head
   const line = state.doc.lineAt(head)
@@ -54,7 +60,9 @@ function cursorPosition(state: EditorState): CursorPosition {
 
 export function createEditor(options: EditorOptions): Editor {
   const highlightCompartment = new Compartment()
+  const fontSizeCompartment = new Compartment()
   let syntaxHighlightEnabled = options.syntaxHighlight
+  let fontSizePx = DEFAULT_FONT_SIZE_PX
 
   const notifyChanges = EditorView.updateListener.of((update) => {
     if (update.docChanged) {
@@ -76,6 +84,7 @@ export function createEditor(options: EditorOptions): Editor {
         EditorView.lineWrapping,
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         highlightCompartment.of(highlightExtensions(syntaxHighlightEnabled)),
+        fontSizeCompartment.of(fontSizeTheme(fontSizePx)),
         notifyChanges,
       ],
     })
@@ -94,9 +103,9 @@ export function createEditor(options: EditorOptions): Editor {
       view.dispatch({ effects: highlightCompartment.reconfigure(highlightExtensions(enabled)) })
     },
     setFontSize(px) {
-      view.dom.style.fontSize = `${px}px`
-      // CSS만 바꾸면 CodeMirror가 줄 높이를 다시 재지 않아 줄 번호와 글이 어긋난다.
-      view.requestMeasure()
+      fontSizePx = px
+      // CSS로만 바꾸면 CodeMirror가 줄 높이를 다시 재지 않아 줄 번호와 글이 어긋난다. 테마로 바꿔야 다시 잰다.
+      view.dispatch({ effects: fontSizeCompartment.reconfigure(fontSizeTheme(px)) })
     },
     focus: () => view.focus(),
   }

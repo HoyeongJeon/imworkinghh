@@ -82,6 +82,6 @@ describe('글쓰기 에디터', () => {
   it('글꼴 크기를 바꾸면 줄 번호와 글이 같은 크기로 바뀐다', () => {
     const { editor, view } = setup()
     editor.setFontSize(20)
-    expect(view().dom.style.fontSize).toBe('20px')
+    expect(getComputedStyle(view().dom).fontSize).toBe('20px')
   })
 })
