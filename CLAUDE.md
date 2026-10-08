@@ -47,6 +47,7 @@ Electron + TypeScript (UI 프레임워크 없음), CodeMirror 6, electron-vite, 
 | 분할 영역 최소 크기 | 80px |
 | 자동 백업 주기 | 30초 |
 | 큰 파일 기준 | 10MB |
+| 상태바 글자수 다시 세기 | 입력이 150ms 멈췄을 때 |
 | 로그 속도 배율 | 느림 1.6 / 보통 1.0 / 빠름 0.5 |
 | 타이핑 연동 | 마지막 입력 후 3초 이내면 배율 0.5, 15초 넘게 입력이 없으면 쉬는 상태 |
 | 글꼴 | `'Cascadia Mono', Consolas, Menlo, 'D2Coding', 'Malgun Gothic', 'Apple SD Gothic Neo', monospace` |
