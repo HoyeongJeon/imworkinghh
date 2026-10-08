@@ -29,6 +29,16 @@ describe('파일 저장 형식', () => {
 - `src/main/files.ts` → `tests/main/files.test.ts`
 - `src/renderer/fake/scenario.ts` → `tests/renderer/fake/scenario.test.ts`
 
+## 코드
+
+- 함수, 클래스, 변수 이름만 읽어도 무엇을 하는지 알 수 있게 짓는다. 예: `ensureExtension`, `writeFileAtomic`, `isDirty`
+- 주석은 이름과 코드로 드러나지 않는 "왜"가 있을 때만 쓴다. 코드가 하는 일을 그대로 풀어 쓰는 주석은 달지 않는다.
+- 모듈끼리는 느슨하게 연결한다.
+  - 모듈은 필요한 것을 직접 만들거나 import하지 않고 인자로 받는다 (DOM 요소, 시계, 타이머, 파일 시스템, IPC API).
+  - 모듈 사이는 작은 인터페이스나 콜백으로만 주고받는다. 예: 출력기는 DOM을 모르고 `LogSink`에만 쓴다.
+  - 화면에 붙이는 일과 이벤트 연결은 조립 모듈(`renderer/app.ts`, `main/index.ts`)에서만 한다.
+- 계산과 판단은 DOM, Electron, 파일 시스템과 분리된 순수 함수로 만든다.
+
 ## 문서
 
 - 결정을 내리면 `DECISIONLOG.md`에 항목을 추가한다.
