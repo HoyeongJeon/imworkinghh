@@ -9,21 +9,11 @@
 **Tech Stack:** Electron, TypeScript (UI 프레임워크 없음), CodeMirror 6, electron-vite, electron-builder, Vitest (+ jsdom)
 
 **Spec:** `docs/superpowers/specs/2026-10-08-imworkinghh-design.md`
-**규칙:** `docs/conventions.md` / **결정:** `DECISIONLOG.md`
+**규칙:** `CLAUDE.md` (예시는 `docs/conventions.md`) / **결정:** `DECISIONLOG.md`
 
 ## Global Constraints
 
-- 모든 npm 패키지는 `devDependencies`에 넣는다. renderer 코드는 Vite가 번들하므로 앱 패키지에 node_modules가 필요 없다.
-- `package.json`에 `"type": "module"`을 넣지 않는다. sandbox preload는 CommonJS여야 한다.
-- BrowserWindow: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`.
-- 디스크 접근은 main 프로세스에서만 한다.
-- 테스트를 먼저 쓰고 실패를 확인한 뒤 구현한다. `describe`는 한국어 명사, `it`은 "~하면 ~한다" 형태의 한국어 문장이다. 테스트 파일은 `tests/`에 `src/`와 같은 경로로 둔다.
-- 주석은 코드로 드러나지 않는 "왜"가 있을 때만 쓴다. 이름만 보고 역할을 알 수 있게 짓는다.
-- 모듈은 의존 대상을 인자로 받는다. 다른 화면 모듈을 직접 import해서 호출하지 않는다 (타입 import는 허용).
-- 커밋 메시지는 한국어, 제목과 본문만 쓴다. AI 서명을 넣지 않는다.
-- 저장: 항상 UTF-8 (BOM 없음), 임시 파일에 쓴 뒤 교체, `EPERM`/`EBUSY`/`EACCES`면 최대 5번 재시도.
-- 수치: 가짜 세션 최대 3000줄, 분할 영역 최소 80px, 자동 백업 30초, 큰 파일 기준 10MB, 로그 속도 배율 느림 1.6 / 보통 1.0 / 빠름 0.5, 타이핑 중(3초 이내) 배율 0.5, 15초 입력 없으면 쉬는 상태.
-- 글꼴: `'Cascadia Mono', Consolas, Menlo, 'D2Coding', 'Malgun Gothic', 'Apple SD Gothic Neo', monospace`.
+모든 Task는 [`CLAUDE.md`](../../../CLAUDE.md)의 **개발 규칙**과 **제품 기준값**을 따른다. 규칙의 원본은 CLAUDE.md 하나이고, 여기에 다시 적지 않는다.
 
 ## Review Focus
 
@@ -6414,21 +6404,22 @@ npm run dist:win
 
 - [ ] **Step 5: CLAUDE.md와 결정 기록 갱신**
 
-`CLAUDE.md`의 `## 필수 정보` 아래에 명령어 줄을 추가한다:
+`CLAUDE.md`의 `## 스택` 섹션 바로 아래에 추가한다:
 ```markdown
-- 명령어: `npm run dev` (실행), `npm test` (테스트), `npm run typecheck` (타입 검사), `npm run dist:win` / `npm run dist:mac` (빌드)
+## 명령어
+
+`npm run dev` (실행), `npm test` (테스트), `npm run typecheck` (타입 검사), `npm run dist:win` / `npm run dist:mac` (빌드)
 ```
 
-`CLAUDE.md`의 문서 표에 두 줄을 추가한다:
+`CLAUDE.md`의 문서 표에 한 줄을 추가한다:
 ```markdown
 | [`docs/build.md`](docs/build.md) | 개발 실행, Windows/macOS 빌드, 바로가기, 설정/백업 파일 위치 |
-| [`docs/superpowers/plans/2026-10-08-imworkinghh.md`](docs/superpowers/plans/2026-10-08-imworkinghh.md) | 첫 구현 계획 (Task 1~19) |
 ```
 
 `DECISIONLOG.md` 끝에 추가한다:
 ```markdown
 
-## D-019 Windows는 설치 프로그램 없이 폴더형으로 배포
+## D-020 Windows는 설치 프로그램 없이 폴더형으로 배포
 - 2026-10-08 / 확정
 - 결정: electron-builder의 `dir` 대상으로 `dist/win-unpacked/`에 실행 파일을 만들고 바탕화면 바로가기로 실행한다.
 - 대안: NSIS 설치 프로그램, 단일 portable exe
@@ -6442,7 +6433,7 @@ Expected: 오류 없음, 전체 PASS
 
 ```bash
 git add electron-builder.yml docs/build.md CLAUDE.md DECISIONLOG.md
-git commit -m "build: Windows 폴더형 패키징과 빌드 문서 추가 (D-019)
+git commit -m "build: Windows 폴더형 패키징과 빌드 문서 추가 (D-020)
 
 electron-builder로 Windows는 dist/win-unpacked, macOS는 dmg를 만든다.
 빌드 방법, 맥 첫 실행 허용 방법, 설정과 백업 파일 위치를 문서로 남긴다."
