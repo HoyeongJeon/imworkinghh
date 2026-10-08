@@ -8,19 +8,19 @@ import { createEditor, type CursorPosition } from '../../src/renderer/editor'
 function setup(initialText = '# 제목') {
   const parent = document.createElement('div')
   document.body.append(parent)
-  const changedTexts: string[] = []
+  const changeNotices: unknown[][] = []
   const cursorPositions: CursorPosition[] = []
   let typedCount = 0
   const editor = createEditor({
     parent,
     initialText,
     syntaxHighlight: true,
-    onTextChanged: (text) => changedTexts.push(text),
+    onTextChanged: (...args: unknown[]) => changeNotices.push(args),
     onCursorMoved: (position) => cursorPositions.push(position),
     onUserTyped: () => typedCount++,
   })
   const view = () => EditorView.findFromDOM(parent.querySelector('.cm-editor') as HTMLElement)!
-  return { editor, view, changedTexts, cursorPositions, typedCount: () => typedCount }
+  return { editor, view, changeNotices, cursorPositions, typedCount: () => typedCount }
 }
 
 describe('글쓰기 에디터', () => {
@@ -28,11 +28,11 @@ describe('글쓰기 에디터', () => {
     expect(setup('# 회의록').editor.getText()).toBe('# 회의록')
   })
 
-  it('글을 통째로 바꾸면 바뀐 글을 알린다', () => {
-    const { editor, changedTexts } = setup()
+  it('글을 통째로 바꾸면 바뀌었다고 알린다', () => {
+    const { editor, changeNotices } = setup()
     editor.setText('새 글')
     expect(editor.getText()).toBe('새 글')
-    expect(changedTexts.at(-1)).toBe('새 글')
+    expect(changeNotices).toHaveLength(1)
   })
 
   it('새 글로 바꾸면 되돌리기 기록이 비워진다', () => {
@@ -44,10 +44,16 @@ describe('글쓰기 에디터', () => {
   })
 
   it('사용자가 입력하면 입력했다고 알린다', () => {
-    const { view, typedCount, changedTexts } = setup('')
+    const { editor, view, typedCount } = setup('')
     view().dispatch({ changes: { from: 0, insert: '가' }, userEvent: 'input.type' })
     expect(typedCount()).toBe(1)
-    expect(changedTexts.at(-1)).toBe('가')
+    expect(editor.getText()).toBe('가')
+  })
+
+  it('큰 글에서도 입력이 느려지지 않도록 바뀐 글 전체 대신 바뀌었다는 사실만 알린다', () => {
+    const { view, changeNotices } = setup('')
+    view().dispatch({ changes: { from: 0, insert: '가' }, userEvent: 'input.type' })
+    expect(changeNotices).toEqual([[]])
   })
 
   it('프로그램이 글을 바꾼 것은 입력으로 치지 않는다', () => {

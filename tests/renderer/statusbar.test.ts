@@ -39,6 +39,10 @@ describe('상태바', () => {
     expect(countCharacters('가나\n다😀')).toBe(4)
   })
 
+  it('짝이 맞지 않는 서로게이트 문자도 하나씩 한 글자로 센다', () => {
+    expect(countCharacters('\ud83d가\ude00')).toBe(3)
+  })
+
   it('상태 정보를 받으면 상태바 양쪽 글자를 바꾼다', () => {
     const element = document.createElement('footer')
     createStatusbar(element).update(status({ dirty: true }))

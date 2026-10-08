@@ -20,7 +20,7 @@ export type EditorOptions = {
   parent: HTMLElement
   initialText: string
   syntaxHighlight: boolean
-  onTextChanged(text: string): void
+  onTextChanged(): void
   onCursorMoved(position: CursorPosition): void
   onUserTyped(): void
 }
@@ -66,7 +66,7 @@ export function createEditor(options: EditorOptions): Editor {
 
   const notifyChanges = EditorView.updateListener.of((update) => {
     if (update.docChanged) {
-      options.onTextChanged(update.state.doc.toString())
+      options.onTextChanged()
       const typedByUser = update.transactions.some((tr) => tr.isUserEvent('input') || tr.isUserEvent('delete'))
       if (typedByUser) options.onUserTyped()
     }
@@ -95,7 +95,7 @@ export function createEditor(options: EditorOptions): Editor {
     getText: () => view.state.doc.toString(),
     setText(text) {
       view.setState(createState(text))
-      options.onTextChanged(text)
+      options.onTextChanged()
       options.onCursorMoved(cursorPosition(view.state))
     },
     setSyntaxHighlight(enabled) {

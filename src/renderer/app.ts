@@ -3,6 +3,7 @@ import { FONT_SIZE_RANGE } from '../shared/settings'
 import type { Settings, ThemeId } from '../shared/types'
 import { createAutosave } from './autosave'
 import { createCloseHandler } from './close-handler'
+import { createDebouncedTask } from './debounce'
 import { createDocumentCommands, type CommandsApi } from './document-commands'
 import { createDocumentState } from './document-state'
 import { createEditor, type CursorPosition } from './editor'
@@ -19,6 +20,8 @@ import { countCharacters, createStatusbar } from './statusbar'
 import { THEMES, getTheme, nextThemeId, renderPrompt, themeCssVariables } from './themes'
 import { createTitlebar } from './titlebar'
 
+const DOCUMENT_STATUS_DELAY_MS = 150
+
 export async function startApp(api: ImworkingApi, doc: Document): Promise<void> {
   const elementById = (id: string): HTMLElement => {
     const element = doc.getElementById(id)
@@ -27,7 +30,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   }
 
   let settings = await api.loadSettings()
-  let latestText = ''
+  let documentStats = { dirty: false, characters: 0 }
   let cursor: CursorPosition = { line: 1, column: 1 }
 
   const titlebar = createTitlebar(elementById('titlebar'), {
@@ -53,23 +56,27 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   function refreshStatus(): void {
     statusbar.update({
       fileName: documentState.fileName(),
-      dirty: documentState.isDirty(latestText),
+      dirty: documentStats.dirty,
       line: cursor.line,
       column: cursor.column,
-      characters: countCharacters(latestText),
+      characters: documentStats.characters,
       encoding: documentState.info().encoding,
       logPaused: player.isPaused(),
     })
   }
 
+  // 글 전체를 읽어 세는 일은 큰 글에서 무거우므로, 입력할 때마다 하지 않고 입력이 잠깐 멈췄을 때 한다.
+  const documentStatus = createDebouncedTask(() => {
+    const text = editor.getText()
+    documentStats = { dirty: documentState.isDirty(text), characters: countCharacters(text) }
+    refreshStatus()
+  }, DOCUMENT_STATUS_DELAY_MS)
+
   const editor = createEditor({
     parent: elementById('editor'),
     initialText: '',
     syntaxHighlight: settings.syntaxHighlight,
-    onTextChanged: (text) => {
-      latestText = text
-      refreshStatus()
-    },
+    onTextChanged: () => documentStatus.schedule(),
     onCursorMoved: (position) => {
       cursor = position
       refreshStatus()
@@ -140,7 +147,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   })
 
   const autosave = createAutosave({
-    takeSnapshot: () => documentState.toBackup(latestText, new Date().toISOString()),
+    takeSnapshot: () => documentState.toBackup(editor.getText(), new Date().toISOString()),
     writeBackup: (backup) => api.writeBackup(backup),
   })
 
@@ -166,9 +173,9 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
       else if (location.origin === 'saved')
         updateSettings({ lastFile: location.path, lastDirectory: location.directory, defaultFormat: location.format })
       else updateSettings({ lastFile: location.path, lastDirectory: location.directory })
-      refreshStatus()
+      documentStatus.runNow()
     },
-    onDocumentReplaced: refreshStatus,
+    onDocumentReplaced: () => documentStatus.runNow(),
   })
 
   bindShortcuts(

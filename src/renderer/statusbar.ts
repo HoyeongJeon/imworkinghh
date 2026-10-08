@@ -24,9 +24,22 @@ export function describeEncoding(encoding: SourceEncoding): string {
   return ENCODING_LABELS[encoding]
 }
 
+const NEWLINE = 0x0a
+
+// 큰 글을 배열로 펼치면 글자 수만큼 메모리를 쓰므로, 펼치지 않고 코드 포인트 단위로 센다.
 export function countCharacters(text: string): number {
-  return [...text.replace(/\n/g, '')].length
+  let count = 0
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index)
+    if (code === NEWLINE) continue
+    if (isLowSurrogate(code) && index > 0 && isHighSurrogate(text.charCodeAt(index - 1))) continue
+    count++
+  }
+  return count
 }
+
+const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff
+const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff
 
 export function formatStatus(info: StatusInfo): { left: string; right: string } {
   const left = `${info.fileName ?? UNTITLED_NAME}${info.dirty ? ' ●' : ''}`
