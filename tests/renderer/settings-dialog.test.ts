@@ -7,7 +7,7 @@ import type { Settings } from '../../src/shared/types'
 function setup() {
   const host = document.createElement('div')
   document.body.append(host)
-  const changes: Settings[] = []
+  const changes: Partial<Settings>[] = []
   const dialog = createSettingsDialog({
     host,
     platform: 'win32',
@@ -49,7 +49,7 @@ describe('설정 창', () => {
     expect(changes.at(-1)?.panicEnabled).toBe(false)
   })
 
-  it('잇따라 바꾼 설정은 앞서 바꾼 값을 유지한다', () => {
+  it('바꾼 항목만 알려서 창이 열린 동안 다른 곳에서 바뀐 설정을 되돌리지 않는다', () => {
     const { dialog, field, changes } = setup()
     dialog.open(defaultSettings('win32'))
     const select = field<HTMLSelectElement>('logSpeed')
@@ -58,7 +58,7 @@ describe('설정 창', () => {
     const checkbox = field<HTMLInputElement>('syntaxHighlight')
     checkbox.checked = false
     checkbox.dispatchEvent(new Event('change'))
-    expect(changes.at(-1)).toMatchObject({ logSpeed: 'fast', syntaxHighlight: false })
+    expect(changes).toEqual([{ logSpeed: 'fast' }, { syntaxHighlight: false }])
   })
 
   it('잘못된 패닉 키 조합은 받아들이지 않고 표시한다', () => {

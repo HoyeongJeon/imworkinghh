@@ -12,7 +12,7 @@ export type SettingsDialogOptions = {
   host: HTMLElement
   platform: string
   themes: { id: ThemeId; name: string }[]
-  onChange(next: Settings): void
+  onChange(patch: Partial<Settings>): void
 }
 
 const LOG_SPEED_LABELS: Record<LogSpeed, string> = { slow: '느림', normal: '보통', fast: '빠름' }
@@ -22,13 +22,11 @@ type Option = { value: string; label: string }
 
 export function createSettingsDialog({ host, platform, themes, onChange }: SettingsDialogOptions): SettingsDialog {
   const doc = host.ownerDocument
-  let current: Settings | null = null
   let overlay: HTMLElement | null = null
 
+  // 창을 연 뒤에도 글꼴 크기나 마지막 파일은 바뀔 수 있으므로, 연 시점의 사본 전체가 아니라 바꾼 항목만 알린다.
   function update(patch: Partial<Settings>): void {
-    if (!current) return
-    current = { ...current, ...patch }
-    onChange(current)
+    if (overlay) onChange(patch)
   }
 
   function row(label: string, control: HTMLElement): HTMLElement {
@@ -106,12 +104,10 @@ export function createSettingsDialog({ host, platform, themes, onChange }: Setti
   function close(): void {
     overlay?.remove()
     overlay = null
-    current = null
   }
 
   function open(settings: Settings): void {
     close()
-    current = settings
     overlay = doc.createElement('div')
     overlay.className = 'settings-overlay'
     const panel = doc.createElement('div')

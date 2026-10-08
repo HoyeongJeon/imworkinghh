@@ -136,7 +136,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     host: elementById('dialog-host'),
     platform: api.platform,
     themes: Object.values(THEMES).map(({ id, name }) => ({ id, name })),
-    onChange: (next) => updateSettings(next),
+    onChange: (patch) => updateSettings(patch),
   })
 
   const autosave = createAutosave({
