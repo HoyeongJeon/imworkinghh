@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { bindShortcuts, displayShortcut, matchesShortcut, parseShortcut, type KeyPress } from '../../src/renderer/shortcuts'
+import {
+  bindShortcuts,
+  displayShortcut,
+  isUsableAppShortcut,
+  matchesShortcut,
+  parseShortcut,
+  type KeyPress,
+} from '../../src/renderer/shortcuts'
 
 const press = (overrides: Partial<KeyPress>): KeyPress => ({
   code: 'KeyS',
@@ -43,6 +50,14 @@ describe('단축키', () => {
     expect(parseShortcut('Mod+Foo')).toBeNull()
     expect(parseShortcut('Hyper+S')).toBeNull()
     expect(parseShortcut('')).toBeNull()
+  })
+
+  it('글을 쓰다 실수로 누르지 않도록 Ctrl, Cmd, Alt 중 하나가 있어야 단축키로 쓸 수 있다', () => {
+    expect(isUsableAppShortcut('Ctrl+`')).toBe(true)
+    expect(isUsableAppShortcut('Mod+Shift+.')).toBe(true)
+    expect(isUsableAppShortcut('m')).toBe(false)
+    expect(isUsableAppShortcut('Shift+M')).toBe(false)
+    expect(isUsableAppShortcut('Ctrl+Foo')).toBe(false)
   })
 
   it('화면에 보여 줄 때 Mod를 OS에 맞는 키 이름으로 바꾼다', () => {

@@ -1,6 +1,6 @@
 import { FONT_SIZE_RANGE } from '../shared/settings'
 import { FILE_FORMATS, LOG_SPEEDS, type FileFormat, type LogSpeed, type Settings, type ThemeId } from '../shared/types'
-import { displayShortcut, parseShortcut } from './shortcuts'
+import { displayShortcut, isUsableAppShortcut } from './shortcuts'
 
 export type SettingsDialog = {
   open(current: Settings): void
@@ -79,10 +79,10 @@ export function createSettingsDialog({ host, platform, themes, onChange }: Setti
     input.type = 'text'
     input.name = 'panicKey'
     input.value = displayShortcut(value, platform)
-    input.addEventListener('input', () => {
-      const isValid = parseShortcut(input.value) !== null
-      input.classList.toggle('invalid', !isValid)
-      if (isValid) update({ panicKey: input.value })
+    // 입력 중간값(예: 'm')이 그대로 저장되면 글을 쓸 때마다 패닉이 실행되므로 입력을 마쳤을 때만 반영한다.
+    input.addEventListener('input', () => input.classList.toggle('invalid', !isUsableAppShortcut(input.value)))
+    input.addEventListener('change', () => {
+      if (isUsableAppShortcut(input.value)) update({ panicKey: input.value })
     })
     return row('패닉 키', input)
   }

@@ -99,7 +99,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     if (previous && previous.syntaxHighlight !== settings.syntaxHighlight) {
       editor.setSyntaxHighlight(settings.syntaxHighlight)
     }
-    doc.documentElement.style.setProperty('--editor-font-size', `${settings.fontSize}px`)
+    editor.setFontSize(settings.fontSize)
   }
 
   function updateSettings(patch: Partial<Settings>): void {

@@ -78,4 +78,10 @@ describe('글쓰기 에디터', () => {
     editor.setText('# 다른 글')
     expect(view().state.facet(language)).toBeNull()
   })
+
+  it('글꼴 크기를 바꾸면 줄 번호와 글이 같은 크기로 바뀐다', () => {
+    const { editor, view } = setup()
+    editor.setFontSize(20)
+    expect(view().dom.style.fontSize).toBe('20px')
+  })
 })

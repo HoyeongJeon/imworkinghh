@@ -58,6 +58,11 @@ function codeForKeyName(keyName: string): string | null {
   return CODE_BY_SYMBOL[keyName] ?? null
 }
 
+export function isUsableAppShortcut(combo: string): boolean {
+  const shortcut = parseShortcut(combo)
+  return shortcut !== null && (shortcut.mod || shortcut.ctrl || shortcut.cmd || shortcut.alt)
+}
+
 export function matchesShortcut(press: KeyPress, combo: string, platform: string): boolean {
   if (press.isComposing) return false
   const shortcut = parseShortcut(combo)

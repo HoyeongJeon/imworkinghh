@@ -67,16 +67,30 @@ describe('설정 창', () => {
     const input = field<HTMLInputElement>('panicKey')
     input.value = 'Ctrl+Foo'
     input.dispatchEvent(new Event('input'))
+    input.dispatchEvent(new Event('change'))
     expect(changes).toHaveLength(0)
     expect(input.classList.contains('invalid')).toBe(true)
   })
 
-  it('올바른 패닉 키 조합은 받아들인다', () => {
+  it('보조키 없는 키는 패닉 키로 받아들이지 않는다', () => {
+    const { dialog, field, changes } = setup()
+    dialog.open(defaultSettings('win32'))
+    const input = field<HTMLInputElement>('panicKey')
+    input.value = 'm'
+    input.dispatchEvent(new Event('input'))
+    input.dispatchEvent(new Event('change'))
+    expect(changes).toHaveLength(0)
+    expect(input.classList.contains('invalid')).toBe(true)
+  })
+
+  it('패닉 키는 입력하는 동안에는 반영하지 않고 입력을 마치면 반영한다', () => {
     const { dialog, field, changes } = setup()
     dialog.open(defaultSettings('win32'))
     const input = field<HTMLInputElement>('panicKey')
     input.value = 'Ctrl+Shift+K'
     input.dispatchEvent(new Event('input'))
+    expect(changes).toHaveLength(0)
+    input.dispatchEvent(new Event('change'))
     expect(changes.at(-1)?.panicKey).toBe('Ctrl+Shift+K')
   })
 

@@ -12,6 +12,7 @@ export type Editor = {
   getText(): string
   setText(text: string): void
   setSyntaxHighlight(enabled: boolean): void
+  setFontSize(px: number): void
   focus(): void
 }
 
@@ -91,6 +92,11 @@ export function createEditor(options: EditorOptions): Editor {
     setSyntaxHighlight(enabled) {
       syntaxHighlightEnabled = enabled
       view.dispatch({ effects: highlightCompartment.reconfigure(highlightExtensions(enabled)) })
+    },
+    setFontSize(px) {
+      view.dom.style.fontSize = `${px}px`
+      // CSS만 바꾸면 CodeMirror가 줄 높이를 다시 재지 않아 줄 번호와 글이 어긋난다.
+      view.requestMeasure()
     },
     focus: () => view.focus(),
   }

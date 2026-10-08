@@ -1,7 +1,6 @@
 :root {
   --font-mono: 'Cascadia Mono', Consolas, Menlo, 'D2Coding', 'Malgun Gothic', 'Apple SD Gothic Neo', monospace;
   --font-ui: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif;
-  --editor-font-size: 14px;
 }
 
 * {
@@ -234,7 +233,6 @@ body {
   height: 100%;
   background: var(--color-background);
   color: var(--color-foreground);
-  font-size: var(--editor-font-size);
 }
 
 #editor .cm-editor.cm-focused {
