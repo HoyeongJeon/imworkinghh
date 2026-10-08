@@ -27,7 +27,7 @@ export type FileServiceDeps = {
 
 export type FileService = {
   openWithDialog(defaultDirectory: string | null): Promise<OpenResult>
-  openPath(path: string): Promise<OpenResult>
+  openPath(path: string, options?: { reportErrors?: boolean }): Promise<OpenResult>
   save(request: SaveRequest): Promise<SaveResult>
 }
 
@@ -71,8 +71,8 @@ export function createFileService({
       return path ? openFromPath(path, true) : { status: 'canceled' }
     },
 
-    openPath(path) {
-      return openFromPath(path, false)
+    openPath(path, { reportErrors = false } = {}) {
+      return openFromPath(path, reportErrors)
     },
 
     async save(request) {

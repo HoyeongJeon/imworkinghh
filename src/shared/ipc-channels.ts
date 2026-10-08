@@ -4,6 +4,8 @@ export const IpcChannel = {
   openFileDialog: 'file:open-dialog',
   openPath: 'file:open-path',
   saveFile: 'file:save',
+  takeRequestedFile: 'file:take-requested',
+  fileOpenRequested: 'file:open-requested',
   confirmDiscard: 'dialog:confirm-discard',
   askRestoreBackup: 'dialog:ask-restore-backup',
   readBackup: 'backup:read',

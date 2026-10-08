@@ -5,10 +5,16 @@ import { installCloseGuard } from './close-guard'
 import { createElectronDialogs } from './dialogs'
 import { createFileService } from './file-service'
 import { registerIpcHandlers } from './ipc'
+import { filePathFromArgs } from './launch-args'
 import { applyAppMenu } from './menu'
+import { createOpenRequestQueue } from './open-requests'
 import { createSettingsStore } from './settings-store'
 import { createMainWindow, loadRenderer } from './window'
 import { boundsIfVisible } from './window-bounds'
+import { IpcChannel } from '../shared/ipc-channels'
+
+let mainWindow: BrowserWindow | null = null
+const openRequests = createOpenRequestQueue((path) => mainWindow?.webContents.send(IpcChannel.fileOpenRequested, path))
 
 async function startApp(): Promise<void> {
   const platform = process.platform
@@ -24,6 +30,7 @@ async function startApp(): Promise<void> {
     bounds: boundsIfVisible(settings.windowBounds, workAreas),
     preloadPath: join(__dirname, '../preload/index.js'),
   })
+  mainWindow = window
 
   const dialogs = createElectronDialogs(window)
   const closeGuard = installCloseGuard(window, async () => {
@@ -36,6 +43,7 @@ async function startApp(): Promise<void> {
     settingsStore,
     backupStore,
     dialogs,
+    openRequests,
     closeWindowNow: closeGuard.closeNow,
   })
   loadRenderer(window, join(__dirname, '../renderer'))
@@ -45,11 +53,19 @@ async function startApp(): Promise<void> {
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
-    const [window] = BrowserWindow.getAllWindows()
-    if (!window) return
-    if (window.isMinimized()) window.restore()
-    window.focus()
+  const launchPath = filePathFromArgs(process.argv)
+  if (launchPath) openRequests.request(launchPath)
+  app.on('open-file', (event, path) => {
+    event.preventDefault()
+    openRequests.request(path)
+  })
+  app.on('second-instance', (_event, argv) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
+    const path = filePathFromArgs(argv)
+    if (path) openRequests.request(path)
   })
   app.whenReady().then(startApp)
   app.on('window-all-closed', () => app.quit())

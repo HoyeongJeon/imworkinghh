@@ -206,3 +206,46 @@ describe('닫기', () => {
     expect(calls).not.toContain('closeWindowNow')
   })
 })
+
+describe('다른 프로그램에서 열기', () => {
+  const openedResult = { status: 'opened' as const, file: openedFile }
+
+  it('저장 안 한 변경이 있으면 열기 전에 저장할지 묻는다', async () => {
+    const { api, calls } = createFakeApi({ openPath: async () => openedResult })
+    const { commands, type } = setup(api)
+    type('쓰던 글')
+    await commands.openRequestedFile('/notes/a.md')
+    expect(calls[0]).toBe('confirmDiscard')
+  })
+
+  it('취소하면 지금 문서를 그대로 둔다', async () => {
+    const { api } = createFakeApi({ openPath: async () => openedResult })
+    const { commands, type, text } = setup(api)
+    type('쓰던 글')
+    expect(await commands.openRequestedFile('/notes/a.md')).toBe(false)
+    expect(text()).toBe('쓰던 글')
+  })
+
+  it('열지 못하면 이유를 보여 주도록 요청하고 지금 문서를 그대로 둔다', async () => {
+    const requests: string[] = []
+    const { api } = createFakeApi({
+      openPath: async (path, options) => {
+        requests.push(`${path} reportErrors=${options?.reportErrors}`)
+        return { status: 'failed', message: '없음' }
+      },
+    })
+    const { commands, text } = setup(api)
+    expect(await commands.openRequestedFile('/notes/gone.md')).toBe(false)
+    expect(requests).toEqual(['/notes/gone.md reportErrors=true'])
+    expect(text()).toBe('')
+  })
+
+  it('열면 에디터에 내용을 넣고 백업을 지운다', async () => {
+    const { api, calls } = createFakeApi({ openPath: async () => openedResult })
+    const { commands, text, locations } = setup(api)
+    expect(await commands.openRequestedFile('/notes/a.md')).toBe(true)
+    expect(text()).toBe('# 열린 글')
+    expect(calls).toContain('clearBackup')
+    expect(locations.at(-1)).toMatchObject({ path: '/notes/a.md', origin: 'opened' })
+  })
+})

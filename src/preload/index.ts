@@ -9,7 +9,11 @@ const api: ImworkingApi = {
   loadSettings: () => ipcRenderer.invoke(IpcChannel.loadSettings),
   saveSettings: (settings) => ipcRenderer.invoke(IpcChannel.saveSettings, settings),
   openFileDialog: (defaultDirectory) => ipcRenderer.invoke(IpcChannel.openFileDialog, defaultDirectory),
-  openPath: (path) => ipcRenderer.invoke(IpcChannel.openPath, path),
+  openPath: (path, options) => ipcRenderer.invoke(IpcChannel.openPath, path, options),
+  takeRequestedFile: () => ipcRenderer.invoke(IpcChannel.takeRequestedFile),
+  onFileOpenRequested: (listener) => {
+    ipcRenderer.on(IpcChannel.fileOpenRequested, (_event, path: string) => listener(path))
+  },
   saveFile: (request) => ipcRenderer.invoke(IpcChannel.saveFile, request),
   confirmDiscard: () => ipcRenderer.invoke(IpcChannel.confirmDiscard),
   askRestoreBackup: (savedAt) => ipcRenderer.invoke(IpcChannel.askRestoreBackup, savedAt),

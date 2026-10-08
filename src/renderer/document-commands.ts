@@ -27,6 +27,7 @@ export type DocumentCommands = {
   saveAs(): Promise<boolean>
   close(): Promise<boolean>
   openPath(path: string): Promise<boolean>
+  openRequestedFile(path: string): Promise<boolean>
   restoreBackup(backup: Backup): void
 }
 
@@ -94,6 +95,15 @@ export function createDocumentCommands(deps: DocumentCommandsDeps): DocumentComm
       const result = await api.openPath(path)
       if (result.status !== 'opened') return false
       showOpenedFile(result.file)
+      return true
+    },
+
+    async openRequestedFile(path) {
+      if (!(await resolveUnsavedChanges())) return false
+      const result = await api.openPath(path, { reportErrors: true })
+      if (result.status !== 'opened') return false
+      showOpenedFile(result.file)
+      await api.clearBackup()
       return true
     },
 

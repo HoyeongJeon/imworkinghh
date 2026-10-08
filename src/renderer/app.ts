@@ -144,7 +144,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
 
   const commandsApi: CommandsApi = {
     openFileDialog: (directory) => api.openFileDialog(directory),
-    openPath: (path) => api.openPath(path),
+    openPath: (path, options) => api.openPath(path, options),
     saveFile: (request) => api.saveFile(request),
     confirmDiscard: () => api.confirmDiscard(),
     closeWindowNow: () => api.closeWindowNow(),
@@ -215,12 +215,16 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   player.start()
 
   const backup = await api.readBackup()
-  if (backup && (await api.askRestoreBackup(backup.savedAt))) {
-    commands.restoreBackup(backup)
-  } else {
-    if (backup) await api.clearBackup()
-    if (settings.lastFile && !(await commands.openPath(settings.lastFile))) updateSettings({ lastFile: null })
+  const restored = backup !== null && (await api.askRestoreBackup(backup.savedAt))
+  if (backup && restored) commands.restoreBackup(backup)
+  else if (backup) await api.clearBackup()
+
+  const requestedFile = await api.takeRequestedFile()
+  if (requestedFile) await commands.openRequestedFile(requestedFile)
+  else if (!restored && settings.lastFile && !(await commands.openPath(settings.lastFile))) {
+    updateSettings({ lastFile: null })
   }
+  api.onFileOpenRequested((path) => void commands.openRequestedFile(path))
 
   autosave.start()
   editor.focus()

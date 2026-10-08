@@ -36,7 +36,9 @@ export type ImworkingApi = {
   loadSettings(): Promise<Settings>
   saveSettings(settings: Settings): Promise<void>
   openFileDialog(defaultDirectory: string | null): Promise<OpenResult>
-  openPath(path: string): Promise<OpenResult>
+  openPath(path: string, options?: { reportErrors?: boolean }): Promise<OpenResult>
+  takeRequestedFile(): Promise<string | null>
+  onFileOpenRequested(listener: (path: string) => void): void
   saveFile(request: SaveRequest): Promise<SaveResult>
   confirmDiscard(): Promise<DiscardChoice>
   askRestoreBackup(savedAt: string): Promise<boolean>

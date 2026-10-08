@@ -94,6 +94,13 @@ describe('파일 열기', () => {
     expect(result.status).toBe('failed')
     expect(shownErrors).toEqual([])
   })
+
+  it('다른 프로그램에서 요청한 파일은 열지 못하면 이유를 보여 준다', async () => {
+    const { dialogs, shownErrors } = createFakeDialogs()
+    const read = async (): Promise<ReadDocumentResult> => ({ status: 'failed', message: '없음' })
+    await createFileService({ dialogs, platform: 'win32', read }).openPath('/notes/gone.md', { reportErrors: true })
+    expect(shownErrors).toEqual(['파일을 열지 못했습니다: 없음'])
+  })
 })
 
 describe('파일 저장', () => {
