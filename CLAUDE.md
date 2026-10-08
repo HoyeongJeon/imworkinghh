@@ -1,38 +1,18 @@
-# imworkinghh 작업 규칙
+# imworkinghh
 
-터미널에서 Claude Code로 작업하는 것처럼 보이는 마크다운 글쓰기 앱. 설계는 `docs/superpowers/specs/2026-10-08-imworkinghh-design.md`를 따른다.
+터미널에서 Claude Code로 작업하는 것처럼 보이는 마크다운 글쓰기 앱. 위쪽에는 가짜 Claude Code 세션이 흐르고, 아래쪽에서 실제로 글을 쓴다. Windows와 macOS를 지원한다.
 
-## 기록
+## 필수 정보
 
-- 결정, 규칙, 합의한 내용은 모두 이 저장소의 문서로 남긴다. 대화나 에이전트 메모리에만 두지 않는다.
-  - 작업 규칙: 이 파일 (`CLAUDE.md`)
-  - 설계와 결정 이유: `docs/superpowers/specs/`
-  - 구현 계획: `docs/superpowers/plans/`
-- 설계가 바뀌면 코드보다 문서를 먼저 고친다.
+- 스택: Electron + TypeScript (UI 프레임워크 없음), CodeMirror 6, electron-vite, electron-builder, Vitest
+- 개발은 TDD로 한다. 테스트를 먼저 쓰고, 테스트 이름은 한국어 행동 문장으로 쓴다.
+- 결정을 내리면 `DECISIONLOG.md`에 기록한다. 에이전트 메모리에 의존하지 않는다.
+- 디스크 접근은 main 프로세스에서만 한다. renderer는 preload가 노출한 API만 쓴다.
 
-## 개발 방식: TDD
+## 문서
 
-1. 실패하는 테스트를 먼저 작성한다.
-2. 테스트를 실행해서 실패하는 것을 확인한다.
-3. 테스트를 통과하는 최소한의 구현을 한다.
-4. 테스트가 통과하는 것을 확인하고 정리한다.
-
-## 테스트 이름 규칙
-
-테스트 이름만 읽어도 그 모듈이 무엇을 하는지 알 수 있어야 한다.
-
-- `describe`: 대상을 한국어 명사로 쓴다.
-- `it`: "~하면 ~한다" 형태의 한국어 문장으로 쓴다.
-- 함수명이나 내부 변수 같은 구현 세부가 아니라, 사용자나 호출자가 관찰하는 결과를 쓴다.
-- 테스트 파일은 `tests/` 아래에 대상 모듈과 같은 경로로 둔다. 예: `src/main/files.ts` → `tests/main/files.test.ts`
-
-```ts
-describe('파일 저장 형식', () => {
-  it('확장자 없이 저장하면 고른 형식의 확장자를 붙인다')
-  it('이미 .md로 끝나면 확장자를 덧붙이지 않는다')
-})
-```
-
-## Git
-
-- 커밋 메시지는 한국어로, 제목과 본문만 쓴다. AI 관련 서명(Co-Authored-By 등)은 넣지 않는다.
+| 문서 | 내용 |
+|---|---|
+| [`DECISIONLOG.md`](DECISIONLOG.md) | 지금까지 내린 결정, 고려한 대안, 이유 |
+| [`docs/conventions.md`](docs/conventions.md) | TDD 순서, 테스트 이름과 위치, 문서와 Git 규칙 |
+| [`docs/superpowers/specs/2026-10-08-imworkinghh-design.md`](docs/superpowers/specs/2026-10-08-imworkinghh-design.md) | 설계: 화면, 단축키, 가짜 세션, 에디터, 테마, 저장, 설정, 모듈 구조, 테스트 대상 |
