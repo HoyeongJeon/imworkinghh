@@ -184,6 +184,19 @@ DOM에 의존하지 않는 순수 모듈이다. 시드를 받는 난수 생성�
 | 열기 실패 | 이유를 알리고 현재 문서는 그대로 둠 |
 | 10MB 이상 파일 | 열기 전에 확인 |
 
+### 8.7 다른 프로그램에서 열기
+
+이미 써 둔 `.md`, `.markdown`, `.txt` 파일을 탐색기(맥은 Finder)에서 이 앱으로 열 수 있어야 한다.
+
+- 실행 인자로 파일 경로가 오면 그 파일을 연다 (Windows "연결 프로그램", 파일을 exe에 끌어다 놓기).
+- 앱이 이미 떠 있으면 새 창을 띄우지 않고 기존 창에서 연다. 저장 안 한 변경이 있으면 먼저 저장할지 묻는다.
+- macOS는 `open-file` 이벤트로 같은 동작을 한다. 앱이 뜨기 전에 들어온 요청은 보관했다가 화면이 준비되면 연다.
+- 시작 순서: 백업 복구 질문 → 다른 프로그램에서 요청한 파일 → (요청이 없을 때만) 마지막으로 연 파일.
+- 사용자가 직접 요청한 열기이므로 실패하면 이유를 보여 준다. 마지막 파일 다시 열기만 조용히 실패한다.
+- 파일 연결 등록
+  - Windows: 설치 프로그램이 없으므로 `scripts/register-file-types.ps1`로 현재 사용자(HKCU)에 등록한다. 관리자 권한이 필요 없다. 등록하면 "연결 프로그램" 목록에 imworkinghh가 나온다. Windows 정책상 기본 앱은 사용자가 한 번 "항상 이 앱으로 열기"를 골라야 한다.
+  - macOS: electron-builder의 `fileAssociations`로 앱 정보에 등록한다. Finder의 "다음으로 열기"에 나온다.
+
 ## 9. 설정 (`shared/settings.ts`, `main/settings-store.ts`)
 
 - 위치: `{userData}/settings.json` (Windows `%APPDATA%\imworkinghh`, macOS `~/Library/Application Support/imworkinghh`)

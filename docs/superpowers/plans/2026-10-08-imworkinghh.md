@@ -49,7 +49,8 @@
 | 16 | `src/renderer/shortcuts.ts`, `src/renderer/statusbar.ts`, `src/renderer/titlebar.ts` |
 | 17 | `src/renderer/settings-dialog.ts` |
 | 18 | `src/renderer/app.ts`, `src/renderer/styles.css`, `src/renderer/index.html`, `src/renderer/main.ts` |
-| 19 | `electron-builder.yml`, `docs/build.md`, `CLAUDE.md` 갱신 |
+| 19 | `src/main/launch-args.ts`, `src/main/open-requests.ts` (+ main/preload/renderer 연결 수정) |
+| 20 | `electron-builder.yml`, `scripts/register-file-types.ps1`, `docs/build.md`, `CLAUDE.md` 갱신 |
 
 ---
 
@@ -6306,10 +6307,318 @@ git commit -m "feat: 화면 모듈 조립과 터미널 스타일 적용
 
 ---
 
-### Task 19: 패키징, 바로가기, 문서 갱신
+### Task 19: 다른 프로그램에서 파일 열기
+
+스펙 8.7. 탐색기/Finder에서 연 `.md`/`.txt` 파일을 이 앱에서 연다. 이미 실행 중이면 기존 창에서 연다.
 
 **Files:**
-- Create: `electron-builder.yml`, `docs/build.md`
+- Create: `src/main/launch-args.ts`, `src/main/open-requests.ts`
+- Modify: `src/main/file-service.ts`, `src/shared/api.ts`, `src/shared/ipc-channels.ts`, `src/main/ipc.ts`, `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/document-commands.ts`, `src/renderer/app.ts`
+- Test: `tests/main/launch-args.test.ts`, `tests/main/open-requests.test.ts`, `tests/main/file-service.test.ts`(추가), `tests/renderer/document-commands.test.ts`(추가)
+
+**Interfaces:**
+- Produces:
+  - `filePathFromArgs(argv: string[]): string | null` — 첫 인자(실행 파일)를 빼고, `-`로 시작하지 않고 확장자가 있는 마지막 인자
+  - `type OpenRequestQueue = { request(path: string): void; takePending(): string | null }`, `createOpenRequestQueue(deliver: (path: string) => void): OpenRequestQueue` — 화면이 `takePending`을 한 번 부르기 전까지는 요청을 보관하고(마지막 것만), 그 뒤에는 바로 `deliver`한다
+  - `FileService.openPath(path: string, options?: { reportErrors?: boolean })` — 기본은 조용히 실패
+  - `ImworkingApi.openPath(path, options?)`, `ImworkingApi.takeRequestedFile(): Promise<string | null>`, `ImworkingApi.onFileOpenRequested(listener: (path: string) => void): void`
+  - `IpcChannel.takeRequestedFile = 'file:take-requested'`, `IpcChannel.fileOpenRequested = 'file:open-requested'`
+  - `DocumentCommands.openRequestedFile(path: string): Promise<boolean>` — 저장 안 한 변경을 먼저 확인하고, 실패 이유를 보여 주도록 요청한다
+
+- [ ] **Step 1: 실패하는 테스트 작성**
+
+`tests/main/launch-args.test.ts`:
+```ts
+import { describe, expect, it } from 'vitest'
+import { filePathFromArgs } from '../../src/main/launch-args'
+
+describe('실행 인자에서 열 파일 찾기', () => {
+  it('탐색기에서 연 파일 경로를 찾는다', () => {
+    expect(filePathFromArgs(['C:\\app\\imworkinghh.exe', 'C:\\notes\\a.md'])).toBe('C:\\notes\\a.md')
+  })
+
+  it('파일 없이 실행하면 열 파일이 없다', () => {
+    expect(filePathFromArgs(['C:\\app\\imworkinghh.exe'])).toBeNull()
+  })
+
+  it('개발 모드의 앱 폴더 인자와 크로미움 옵션은 무시한다', () => {
+    expect(filePathFromArgs(['electron.exe', '.', '--remote-debugging-port=9222', 'C:\\notes\\b.txt'])).toBe(
+      'C:\\notes\\b.txt',
+    )
+    expect(filePathFromArgs(['electron.exe', '.', '--allow-file-access-from-files'])).toBeNull()
+  })
+
+  it('경로에 공백과 한글이 있어도 그대로 돌려준다', () => {
+    expect(filePathFromArgs(['imworkinghh.exe', 'C:\\Users\\홍길동\\내 문서\\회의록 10월.md'])).toBe(
+      'C:\\Users\\홍길동\\내 문서\\회의록 10월.md',
+    )
+  })
+})
+```
+
+`tests/main/open-requests.test.ts`:
+```ts
+import { describe, expect, it } from 'vitest'
+import { createOpenRequestQueue } from '../../src/main/open-requests'
+
+function setup() {
+  const delivered: string[] = []
+  return { delivered, queue: createOpenRequestQueue((path) => delivered.push(path)) }
+}
+
+describe('파일 열기 요청 전달', () => {
+  it('화면이 준비되기 전에 들어온 요청은 보관했다가 화면이 가져간다', () => {
+    const { queue, delivered } = setup()
+    queue.request('/notes/a.md')
+    expect(delivered).toEqual([])
+    expect(queue.takePending()).toBe('/notes/a.md')
+  })
+
+  it('화면이 가져간 뒤 들어온 요청은 바로 전달한다', () => {
+    const { queue, delivered } = setup()
+    queue.takePending()
+    queue.request('/notes/b.md')
+    expect(delivered).toEqual(['/notes/b.md'])
+  })
+
+  it('보관한 요청은 한 번만 넘긴다', () => {
+    const { queue } = setup()
+    queue.request('/notes/a.md')
+    queue.takePending()
+    expect(queue.takePending()).toBeNull()
+  })
+
+  it('준비 전에 여러 번 들어오면 마지막 요청만 남긴다', () => {
+    const { queue } = setup()
+    queue.request('/notes/a.md')
+    queue.request('/notes/b.md')
+    expect(queue.takePending()).toBe('/notes/b.md')
+  })
+})
+```
+
+`tests/main/file-service.test.ts`의 `describe('파일 열기')` 안에 추가:
+```ts
+  it('다른 프로그램에서 요청한 파일은 열지 못하면 이유를 보여 준다', async () => {
+    const { dialogs, shownErrors } = createFakeDialogs()
+    const read = async (): Promise<ReadDocumentResult> => ({ status: 'failed', message: '없음' })
+    await createFileService({ dialogs, platform: 'win32', read }).openPath('/notes/gone.md', { reportErrors: true })
+    expect(shownErrors).toEqual(['파일을 열지 못했습니다: 없음'])
+  })
+```
+
+`tests/renderer/document-commands.test.ts` 끝에 추가:
+```ts
+describe('다른 프로그램에서 열기', () => {
+  const openedResult = { status: 'opened' as const, file: openedFile }
+
+  it('저장 안 한 변경이 있으면 열기 전에 저장할지 묻는다', async () => {
+    const { api, calls } = createFakeApi({ openPath: async () => openedResult })
+    const { commands, type } = setup(api)
+    type('쓰던 글')
+    await commands.openRequestedFile('/notes/a.md')
+    expect(calls[0]).toBe('confirmDiscard')
+  })
+
+  it('취소하면 지금 문서를 그대로 둔다', async () => {
+    const { api } = createFakeApi({ openPath: async () => openedResult })
+    const { commands, type, text } = setup(api)
+    type('쓰던 글')
+    expect(await commands.openRequestedFile('/notes/a.md')).toBe(false)
+    expect(text()).toBe('쓰던 글')
+  })
+
+  it('열지 못하면 이유를 보여 주도록 요청하고 지금 문서를 그대로 둔다', async () => {
+    const requests: string[] = []
+    const { api } = createFakeApi({
+      openPath: async (path, options) => {
+        requests.push(`${path} reportErrors=${options?.reportErrors}`)
+        return { status: 'failed', message: '없음' }
+      },
+    })
+    const { commands, text } = setup(api)
+    expect(await commands.openRequestedFile('/notes/gone.md')).toBe(false)
+    expect(requests).toEqual(['/notes/gone.md reportErrors=true'])
+    expect(text()).toBe('')
+  })
+
+  it('열면 에디터에 내용을 넣고 백업을 지운다', async () => {
+    const { api, calls } = createFakeApi({ openPath: async () => openedResult })
+    const { commands, text, locations } = setup(api)
+    expect(await commands.openRequestedFile('/notes/a.md')).toBe(true)
+    expect(text()).toBe('# 열린 글')
+    expect(calls).toContain('clearBackup')
+    expect(locations.at(-1)).toMatchObject({ path: '/notes/a.md', origin: 'opened' })
+  })
+})
+```
+
+- [ ] **Step 2: 테스트가 실패하는지 확인**
+
+Run: `npx vitest run tests/main/launch-args.test.ts tests/main/open-requests.test.ts tests/main/file-service.test.ts tests/renderer/document-commands.test.ts`
+Expected: 새 파일 두 개는 import 실패, 기존 파일의 새 테스트는 `openRequestedFile is not a function` 등으로 FAIL
+
+- [ ] **Step 3: main 쪽 구현**
+
+`src/main/launch-args.ts`:
+```ts
+import { extname } from 'node:path'
+
+export function filePathFromArgs(argv: string[]): string | null {
+  const fileArgs = argv.slice(1).filter((arg) => !arg.startsWith('-') && extname(arg) !== '')
+  return fileArgs.at(-1) ?? null
+}
+```
+
+`src/main/open-requests.ts`:
+```ts
+export type OpenRequestQueue = {
+  request(path: string): void
+  takePending(): string | null
+}
+
+export function createOpenRequestQueue(deliver: (path: string) => void): OpenRequestQueue {
+  let pendingPath: string | null = null
+  let rendererReady = false
+  return {
+    request(path) {
+      if (rendererReady) deliver(path)
+      else pendingPath = path
+    },
+    takePending() {
+      rendererReady = true
+      const path = pendingPath
+      pendingPath = null
+      return path
+    },
+  }
+}
+```
+
+`src/main/file-service.ts`: `FileService.openPath`와 구현을 바꾼다.
+```ts
+  openPath(path: string, options?: { reportErrors?: boolean }): Promise<OpenResult>
+```
+```ts
+    openPath(path, { reportErrors = false } = {}) {
+      return openFromPath(path, reportErrors)
+    },
+```
+
+`src/shared/api.ts`의 `ImworkingApi`:
+```ts
+  openPath(path: string, options?: { reportErrors?: boolean }): Promise<OpenResult>
+  takeRequestedFile(): Promise<string | null>
+  onFileOpenRequested(listener: (path: string) => void): void
+```
+
+`src/shared/ipc-channels.ts`에 추가:
+```ts
+  takeRequestedFile: 'file:take-requested',
+  fileOpenRequested: 'file:open-requested',
+```
+
+`src/main/ipc.ts`: `IpcDeps`에 `openRequests: OpenRequestQueue`를 추가하고 핸들러를 바꾼다.
+```ts
+  ipcMain.handle(IpcChannel.openPath, (_event, path: string, options?: { reportErrors?: boolean }) =>
+    fileService.openPath(path, options),
+  )
+  ipcMain.handle(IpcChannel.takeRequestedFile, () => deps.openRequests.takePending())
+```
+
+`src/main/index.ts`: 요청 큐를 모듈 맨 위에서 만들고, 실행 인자·`second-instance`·`open-file`을 큐로 보낸다. `open-file`은 앱이 준비되기 전에도 오므로 `whenReady` 전에 등록한다.
+```ts
+let mainWindow: BrowserWindow | null = null
+const openRequests = createOpenRequestQueue((path) => mainWindow?.webContents.send(IpcChannel.fileOpenRequested, path))
+```
+- `startApp` 안에서 만든 창을 `mainWindow`에 넣고, `registerIpcHandlers`에 `openRequests`를 넘긴다.
+- 잠금을 얻은 쪽 블록에서:
+```ts
+  const launchPath = filePathFromArgs(process.argv)
+  if (launchPath) openRequests.request(launchPath)
+  app.on('open-file', (event, path) => {
+    event.preventDefault()
+    openRequests.request(path)
+  })
+  app.on('second-instance', (_event, argv) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
+    const path = filePathFromArgs(argv)
+    if (path) openRequests.request(path)
+  })
+```
+
+`src/preload/index.ts`:
+```ts
+  openPath: (path, options) => ipcRenderer.invoke(IpcChannel.openPath, path, options),
+  takeRequestedFile: () => ipcRenderer.invoke(IpcChannel.takeRequestedFile),
+  onFileOpenRequested: (listener) => {
+    ipcRenderer.on(IpcChannel.fileOpenRequested, (_event, path: string) => listener(path))
+  },
+```
+
+- [ ] **Step 4: renderer 쪽 구현**
+
+`src/renderer/document-commands.ts`: `DocumentCommands`에 `openRequestedFile(path: string): Promise<boolean>`을 추가한다.
+```ts
+    async openRequestedFile(path) {
+      if (!(await resolveUnsavedChanges())) return false
+      const result = await api.openPath(path, { reportErrors: true })
+      if (result.status !== 'opened') return false
+      showOpenedFile(result.file)
+      await api.clearBackup()
+      return true
+    },
+```
+
+`src/renderer/app.ts`: `commandsApi.openPath`가 옵션을 넘기게 하고, 시작 순서를 스펙 8.7대로 바꾼다.
+```ts
+    openPath: (path, options) => api.openPath(path, options),
+```
+```ts
+  const backup = await api.readBackup()
+  const restored = backup !== null && (await api.askRestoreBackup(backup.savedAt))
+  if (backup && restored) commands.restoreBackup(backup)
+  else if (backup) await api.clearBackup()
+
+  const requestedFile = await api.takeRequestedFile()
+  if (requestedFile) await commands.openRequestedFile(requestedFile)
+  else if (!restored && settings.lastFile && !(await commands.openPath(settings.lastFile))) {
+    updateSettings({ lastFile: null })
+  }
+  api.onFileOpenRequested((path) => void commands.openRequestedFile(path))
+```
+
+- [ ] **Step 5: 테스트, 타입 검사 통과 확인**
+
+Run: `npx vitest run tests/main/launch-args.test.ts tests/main/open-requests.test.ts tests/main/file-service.test.ts tests/renderer/document-commands.test.ts && npm run typecheck`
+Expected: 모두 PASS, 타입 오류 없음
+
+- [ ] **Step 6: 앱에서 확인**
+
+1. `npm run dev`로 앱을 띄운 상태에서, 두 번째 실행에 파일 경로를 넘긴다: `node_modules/electron/dist/electron.exe . "<저장해 둔 .md 경로>"`
+2. 새 창이 뜨지 않고 기존 창의 에디터에 그 파일 내용이 열린다. 글을 고쳐 둔 상태였다면 저장할지 먼저 묻는다.
+3. 앱을 끈 상태에서 `node_modules/electron/dist/electron.exe . "<.md 경로>"`로 실행하면 마지막 파일 대신 그 파일이 열린다. (개발 빌드는 `npm run build` 후 확인)
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src tests
+git commit -m "feat: 탐색기/Finder에서 연 파일을 이 앱에서 열기
+
+실행 인자와 macOS open-file로 들어온 파일을 열고, 이미 실행 중이면 기존
+창에서 저장 안 한 변경을 확인한 뒤 연다. 화면이 준비되기 전에 들어온
+요청은 보관했다가 넘긴다."
+```
+
+---
+
+### Task 20: 패키징, 바로가기, 파일 연결 등록, 문서 갱신
+
+**Files:**
+- Create: `electron-builder.yml`, `docs/build.md`, `scripts/register-file-types.ps1`
 - Modify: `CLAUDE.md`, `DECISIONLOG.md`
 
 - [ ] **Step 1: 패키징 설정 작성**
@@ -6330,6 +6639,13 @@ mac:
   target:
     - dmg
   category: public.app-category.productivity
+fileAssociations:
+  - ext: [md, markdown]
+    name: Markdown
+    role: Editor
+  - ext: txt
+    name: Text
+    role: Editor
 ```
 
 - [ ] **Step 2: Windows 빌드**
@@ -6353,7 +6669,44 @@ Test-Path 'C:\Users\홍길동\Desktop\09_앱_바로가기\imworkinghh.lnk'
 ```
 Expected: `True`, 바로가기를 더블클릭하면 앱이 뜬다.
 
-- [ ] **Step 4: 빌드 문서 작성**
+- [ ] **Step 4: Windows 파일 연결 등록 스크립트**
+
+설치 프로그램이 없으므로 현재 사용자 레지스트리(HKCU)에 등록한다. 관리자 권한이 필요 없고, 등록하면 탐색기 "연결 프로그램" 목록에 imworkinghh가 나온다.
+
+`scripts/register-file-types.ps1`:
+```powershell
+param([string]$ExePath = (Join-Path $PSScriptRoot '..\dist\win-unpacked\imworkinghh.exe'))
+$exe = (Resolve-Path $ExePath).Path
+$classes = 'HKCU:\Software\Classes'
+$progId = 'imworkinghh.document'
+$command = "`"$exe`" `"%1`""
+
+# New-Item -Force는 이미 있는 키를 지우고 다시 만들어서 다른 앱의 연결까지 지운다. 없을 때만 만든다.
+function Use-Key([string]$Path) {
+  if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
+  return $Path
+}
+
+Set-Item -Path (Use-Key "$classes\$progId") -Value 'imworkinghh document'
+Set-Item -Path (Use-Key "$classes\$progId\shell\open\command") -Value $command
+
+$app = Use-Key "$classes\Applications\imworkinghh.exe"
+Set-ItemProperty -Path $app -Name 'FriendlyAppName' -Value 'imworkinghh'
+Set-Item -Path (Use-Key "$app\shell\open\command") -Value $command
+$supportedTypes = Use-Key "$app\SupportedTypes"
+
+foreach ($extension in '.md', '.markdown', '.txt') {
+  $openWith = Use-Key "$classes\$extension\OpenWithProgids"
+  New-ItemProperty -Path $openWith -Name $progId -Value '' -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $supportedTypes -Name $extension -Value '' -PropertyType String -Force | Out-Null
+}
+"registered: $exe"
+```
+
+Run: `powershell -ExecutionPolicy Bypass -File scripts/register-file-types.ps1`
+Expected: `registered: C:\dev\imworkinghh\dist\win-unpacked\imworkinghh.exe`. 탐색기에서 `.md` 파일 우클릭 → 연결 프로그램에 imworkinghh가 보이고, 고르면 이 앱에서 열린다.
+
+- [ ] **Step 5: 빌드 문서 작성**
 
 `docs/build.md`:
 ````markdown
@@ -6392,6 +6745,12 @@ npm run dist:win
 4. 결과: `dist/imworkinghh-<버전>.dmg`. 열어서 Applications로 끌어 놓는다.
 5. 서명하지 않은 앱이라 처음 한 번은 Finder에서 앱을 우클릭 → 열기 → 열기로 허용한다.
 
+## 탐색기에서 이 앱으로 열기
+
+- Windows: 빌드한 뒤 `powershell -ExecutionPolicy Bypass -File scripts/register-file-types.ps1`을 한 번 실행한다. `.md`/`.txt` 파일을 우클릭 → 연결 프로그램 → imworkinghh를 고르고 "항상 이 앱으로 열기"를 켜면 더블클릭으로 열린다. 폴더를 옮기면 스크립트를 다시 실행한다.
+- macOS: dmg로 설치하면 Finder에서 파일 우클릭 → 다음으로 열기 → imworkinghh가 보인다. 기본 앱으로 하려면 정보 가져오기 → 다음으로 열기 → 모두 변경.
+- 이미 실행 중이면 새 창 대신 기존 창에서 연다.
+
 ## 데이터 위치
 
 | 항목 | Windows | macOS |
@@ -6402,7 +6761,7 @@ npm run dist:win
 설정 파일이 깨지면 `settings.bad.json`으로 옮겨지고 기본값으로 시작한다.
 ````
 
-- [ ] **Step 5: CLAUDE.md와 결정 기록 갱신**
+- [ ] **Step 6: CLAUDE.md와 결정 기록 갱신**
 
 `CLAUDE.md`의 `## 스택` 섹션 바로 아래에 추가한다:
 ```markdown
@@ -6419,21 +6778,21 @@ npm run dist:win
 `DECISIONLOG.md` 끝에 추가한다:
 ```markdown
 
-## D-020 Windows는 설치 프로그램 없이 폴더형으로 배포
+## D-021 Windows는 설치 프로그램 없이 폴더형으로 배포
 - 2026-10-08 / 확정
 - 결정: electron-builder의 `dir` 대상으로 `dist/win-unpacked/`에 실행 파일을 만들고 바탕화면 바로가기로 실행한다.
 - 대안: NSIS 설치 프로그램, 단일 portable exe
 - 이유: 설치 과정이 없고 실행이 빠르다. portable exe는 실행할 때마다 압축을 풀어서 느리다. pdf-merger와 같은 방식이다.
 ```
 
-- [ ] **Step 6: 전체 확인과 Commit**
+- [ ] **Step 7: 전체 확인과 Commit**
 
 Run: `npm run typecheck && npm test`
 Expected: 오류 없음, 전체 PASS
 
 ```bash
-git add electron-builder.yml docs/build.md CLAUDE.md DECISIONLOG.md
-git commit -m "build: Windows 폴더형 패키징과 빌드 문서 추가 (D-020)
+git add electron-builder.yml scripts/register-file-types.ps1 docs/build.md CLAUDE.md DECISIONLOG.md
+git commit -m "build: Windows 폴더형 패키징, 파일 연결 등록, 빌드 문서 추가 (D-021)
 
 electron-builder로 Windows는 dist/win-unpacked, macOS는 dmg를 만든다.
 빌드 방법, 맥 첫 실행 허용 방법, 설정과 백업 파일 위치를 문서로 남긴다."
@@ -6457,4 +6816,5 @@ electron-builder로 Windows는 dist/win-unpacked, macOS는 dmg를 만든다.
 | 8.5 자동 백업, 복구, 마지막 파일 다시 열기 | 6, 15, 18 |
 | 8.6 오류 처리, 큰 파일 확인 | 3, 5, 7, 8 |
 | 9. 설정 (교정, 깨진 파일, 창 위치) | 1, 6, 8, 17 |
-| 2. 맥 빌드, 바로가기 | 19 |
+| 8.7 다른 프로그램에서 열기 | 19, 20 |
+| 2. 맥 빌드, 바로가기 | 20 |

@@ -54,4 +54,4 @@ Electron + TypeScript (UI 프레임워크 없음), CodeMirror 6, electron-vite, 
 | [`DECISIONLOG.md`](DECISIONLOG.md) | 지금까지 내린 결정, 고려한 대안, 이유 |
 | [`docs/conventions.md`](docs/conventions.md) | 개발 규칙의 예시와 자세한 설명 |
 | [`docs/superpowers/specs/2026-10-08-imworkinghh-design.md`](docs/superpowers/specs/2026-10-08-imworkinghh-design.md) | 설계: 화면, 단축키, 가짜 세션, 에디터, 테마, 저장, 설정, 모듈 구조, 테스트 대상 |
-| [`docs/superpowers/plans/2026-10-08-imworkinghh.md`](docs/superpowers/plans/2026-10-08-imworkinghh.md) | 첫 구현 계획 (Task 1~19) |
+| [`docs/superpowers/plans/2026-10-08-imworkinghh.md`](docs/superpowers/plans/2026-10-08-imworkinghh.md) | 첫 구현 계획 (Task 1~20) |
