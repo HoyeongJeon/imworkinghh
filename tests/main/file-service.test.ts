@@ -9,6 +9,7 @@ function createFakeDialogs(overrides: Partial<FileDialogs> = {}) {
     pickOpenPath: async () => null,
     pickSavePath: async () => null,
     confirmLargeFile: async () => false,
+    confirmOverwrite: async () => false,
     showError: async (title, message) => {
       shownErrors.push(`${title}: ${message}`)
     },
@@ -152,6 +153,32 @@ describe('파일 저장', () => {
     )
     expect(write).toHaveBeenCalledWith(expect.objectContaining({ path: '/notes/회의록.txt' }))
     expect(result).toMatchObject({ status: 'saved', path: '/notes/회의록.txt', format: 'txt' })
+  })
+
+  it('확장자를 붙인 이름의 파일이 이미 있으면 덮어쓸지 묻고, 거절하면 저장하지 않는다', async () => {
+    const write = savedWrite()
+    const confirmOverwrite = vi.fn(async () => false)
+    const dialogs = createFakeDialogs({ pickSavePath: async () => '/notes/회의록', confirmOverwrite }).dialogs
+    const service = createFileService({ dialogs, platform: 'win32', write, exists: async () => true })
+    expect(await service.save(saveRequest())).toEqual({ status: 'canceled' })
+    expect(confirmOverwrite).toHaveBeenCalledWith('/notes/회의록.md')
+    expect(write).not.toHaveBeenCalled()
+  })
+
+  it('확장자를 붙인 이름의 파일이 이미 있어도 덮어쓰기를 허락하면 저장한다', async () => {
+    const write = savedWrite()
+    const dialogs = createFakeDialogs({ pickSavePath: async () => '/notes/회의록', confirmOverwrite: async () => true })
+      .dialogs
+    const service = createFileService({ dialogs, platform: 'win32', write, exists: async () => true })
+    expect(await service.save(saveRequest())).toMatchObject({ status: 'saved', path: '/notes/회의록.md' })
+  })
+
+  it('저장 창에서 고른 이름 그대로 저장하면 덮어쓰기를 다시 묻지 않는다', async () => {
+    const confirmOverwrite = vi.fn(async () => false)
+    const dialogs = createFakeDialogs({ pickSavePath: async () => '/notes/a.md', confirmOverwrite }).dialogs
+    const service = createFileService({ dialogs, platform: 'win32', write: savedWrite(), exists: async () => true })
+    expect(await service.save(saveRequest())).toMatchObject({ status: 'saved' })
+    expect(confirmOverwrite).not.toHaveBeenCalled()
   })
 
   it('저장에 실패하면 이유를 보여 주고 실패를 알린다', async () => {

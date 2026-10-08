@@ -43,6 +43,18 @@ export function createElectronDialogs(window: BrowserWindow): AppDialogs {
       return response === 0
     },
 
+    async confirmOverwrite(path) {
+      const { response } = await dialog.showMessageBox(window, {
+        type: 'warning',
+        buttons: ['덮어쓰기', '취소'],
+        defaultId: 1,
+        cancelId: 1,
+        message: '같은 이름의 파일이 이미 있습니다.',
+        detail: `${path}\n덮어쓸까요?`,
+      })
+      return response === 0
+    },
+
     async showError(title, message) {
       await dialog.showMessageBox(window, { type: 'error', buttons: ['확인'], message: title, detail: message })
     },

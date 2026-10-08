@@ -1,3 +1,4 @@
+import { access } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { OpenResult, SaveRequest, SaveResult } from '../shared/api'
 import { defaultEol } from '../shared/eol'
@@ -15,6 +16,7 @@ export type FileDialogs = {
   pickOpenPath(defaultDirectory: string | null): Promise<string | null>
   pickSavePath(suggestedPath: string, preferredFormat: FileFormat): Promise<string | null>
   confirmLargeFile(bytes: number): Promise<boolean>
+  confirmOverwrite(path: string): Promise<boolean>
   showError(title: string, message: string): Promise<void>
 }
 
@@ -23,6 +25,7 @@ export type FileServiceDeps = {
   platform: string
   read?: (path: string, options?: { maxBytes?: number }) => Promise<ReadDocumentResult>
   write?: (request: WriteDocumentRequest) => Promise<WriteDocumentResult>
+  exists?: (path: string) => Promise<boolean>
 }
 
 export type FileService = {
@@ -36,6 +39,10 @@ export function createFileService({
   platform,
   read = readDocument,
   write = (request) => writeDocument(request),
+  exists = (path) => access(path).then(
+    () => true,
+    () => false,
+  ),
 }: FileServiceDeps): FileService {
   async function readWithSizeCheck(path: string): Promise<ReadDocumentResult | null> {
     const result = await read(path)
@@ -83,6 +90,9 @@ export function createFileService({
       if (!chosenPath) return { status: 'canceled' }
 
       const path = ensureExtension(chosenPath, request.defaultFormat)
+      // 저장 창은 입력한 이름으로만 덮어쓰기를 확인하므로, 확장자를 붙여 이름이 바뀌었으면 여기서 다시 묻는다.
+      const renamed = path !== chosenPath
+      if (renamed && (await exists(path)) && !(await dialogs.confirmOverwrite(path))) return { status: 'canceled' }
       const result = await write({ path, text: request.text, eol: request.eol })
       if (result.status === 'failed') {
         await dialogs.showError('저장하지 못했습니다', result.message)
