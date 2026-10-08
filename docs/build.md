@@ -18,7 +18,7 @@ npm run dist:win
 ```
 
 - 결과: `dist/win-unpacked/imworkinghh.exe` (설치 없이 폴더째 실행)
-- 바로가기: `C:\Users\홍길동\Desktop\09_앱_바로가기\imworkinghh.lnk`
+- 바로가기: 바탕화면의 `imworkinghh.lnk`
 - 다시 빌드하기 전에 실행 중인 앱을 닫는다. 실행 중이면 exe를 덮어쓰지 못한다.
 
 ## macOS 빌드

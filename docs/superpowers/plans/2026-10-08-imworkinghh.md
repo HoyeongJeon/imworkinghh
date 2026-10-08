@@ -6661,11 +6661,12 @@ Expected: 개발 모드와 같은 화면이 뜨고, 개발자 도구는 뜨지 �
 PowerShell:
 ```powershell
 $shell = New-Object -ComObject WScript.Shell
-$shortcut = $shell.CreateShortcut('C:\Users\홍길동\Desktop\09_앱_바로가기\imworkinghh.lnk')
+$shortcutPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'imworkinghh.lnk'
+$shortcut = $shell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = 'C:\dev\imworkinghh\dist\win-unpacked\imworkinghh.exe'
 $shortcut.WorkingDirectory = 'C:\dev\imworkinghh\dist\win-unpacked'
 $shortcut.Save()
-Test-Path 'C:\Users\홍길동\Desktop\09_앱_바로가기\imworkinghh.lnk'
+Test-Path $shortcutPath
 ```
 Expected: `True`, 바로가기를 더블클릭하면 앱이 뜬다.
 
@@ -6728,7 +6729,7 @@ npm run dist:win
 ```
 
 - 결과: `dist/win-unpacked/imworkinghh.exe` (설치 없이 폴더째 실행)
-- 바로가기: `C:\Users\홍길동\Desktop\09_앱_바로가기\imworkinghh.lnk`
+- 바로가기: 바탕화면의 `imworkinghh.lnk`
 - 다시 빌드하기 전에 실행 중인 앱을 닫는다. 실행 중이면 exe를 덮어쓰지 못한다.
 
 ## macOS 빌드
