@@ -1,0 +1,179 @@
+import { FONT_SIZE_RANGE } from '../shared/settings'
+import { FILE_FORMATS, LOG_SPEEDS, type FileFormat, type LogSpeed, type Settings, type ThemeId } from '../shared/types'
+import { displayShortcut, parseShortcut } from './shortcuts'
+
+export type SettingsDialog = {
+  open(current: Settings): void
+  close(): void
+  isOpen(): boolean
+}
+
+export type SettingsDialogOptions = {
+  host: HTMLElement
+  platform: string
+  themes: { id: ThemeId; name: string }[]
+  onChange(next: Settings): void
+}
+
+const LOG_SPEED_LABELS: Record<LogSpeed, string> = { slow: '느림', normal: '보통', fast: '빠름' }
+const FORMAT_LABELS: Record<FileFormat, string> = { md: 'Markdown (.md)', txt: 'Text (.txt)' }
+
+type Option = { value: string; label: string }
+
+export function createSettingsDialog({ host, platform, themes, onChange }: SettingsDialogOptions): SettingsDialog {
+  const doc = host.ownerDocument
+  let current: Settings | null = null
+  let overlay: HTMLElement | null = null
+
+  function update(patch: Partial<Settings>): void {
+    if (!current) return
+    current = { ...current, ...patch }
+    onChange(current)
+  }
+
+  function row(label: string, control: HTMLElement): HTMLElement {
+    const wrapper = doc.createElement('label')
+    wrapper.className = 'settings-row'
+    const text = doc.createElement('span')
+    text.textContent = label
+    wrapper.append(text, control)
+    return wrapper
+  }
+
+  function selectRow(
+    label: string,
+    name: keyof Settings,
+    options: Option[],
+    value: string,
+    onSelect: (value: string) => void,
+  ): HTMLElement {
+    const select = doc.createElement('select')
+    select.name = name
+    for (const option of options) {
+      const element = doc.createElement('option')
+      element.value = option.value
+      element.textContent = option.label
+      select.append(element)
+    }
+    select.value = value
+    select.addEventListener('change', () => onSelect(select.value))
+    return row(label, select)
+  }
+
+  function checkboxRow(
+    label: string,
+    name: keyof Settings,
+    checked: boolean,
+    onToggle: (checked: boolean) => void,
+  ): HTMLElement {
+    const input = doc.createElement('input')
+    input.type = 'checkbox'
+    input.name = name
+    input.checked = checked
+    input.addEventListener('change', () => onToggle(input.checked))
+    return row(label, input)
+  }
+
+  function panicKeyRow(value: string): HTMLElement {
+    const input = doc.createElement('input')
+    input.type = 'text'
+    input.name = 'panicKey'
+    input.value = displayShortcut(value, platform)
+    input.addEventListener('input', () => {
+      const isValid = parseShortcut(input.value) !== null
+      input.classList.toggle('invalid', !isValid)
+      if (isValid) update({ panicKey: input.value })
+    })
+    return row('패닉 키', input)
+  }
+
+  function fontSizeRow(value: number): HTMLElement {
+    const input = doc.createElement('input')
+    input.type = 'number'
+    input.name = 'fontSize'
+    input.min = String(FONT_SIZE_RANGE.min)
+    input.max = String(FONT_SIZE_RANGE.max)
+    input.value = String(value)
+    input.addEventListener('change', () => {
+      const size = Number(input.value)
+      const isValid = Number.isInteger(size) && size >= FONT_SIZE_RANGE.min && size <= FONT_SIZE_RANGE.max
+      input.classList.toggle('invalid', !isValid)
+      if (isValid) update({ fontSize: size })
+    })
+    return row('글꼴 크기', input)
+  }
+
+  function close(): void {
+    overlay?.remove()
+    overlay = null
+    current = null
+  }
+
+  function open(settings: Settings): void {
+    close()
+    current = settings
+    overlay = doc.createElement('div')
+    overlay.className = 'settings-overlay'
+    const panel = doc.createElement('div')
+    panel.className = 'settings-panel'
+    panel.setAttribute('role', 'dialog')
+    panel.setAttribute('aria-label', 'settings')
+
+    const title = doc.createElement('div')
+    title.className = 'settings-title'
+    title.textContent = '# settings'
+
+    const closeButton = doc.createElement('button')
+    closeButton.type = 'button'
+    closeButton.className = 'settings-close'
+    closeButton.textContent = 'close (Esc)'
+    closeButton.addEventListener('click', close)
+
+    panel.append(
+      title,
+      selectRow(
+        '테마',
+        'theme',
+        themes.map((theme) => ({ value: theme.id, label: theme.name })),
+        settings.theme,
+        (value) => update({ theme: value as ThemeId }),
+      ),
+      selectRow(
+        '로그 속도',
+        'logSpeed',
+        LOG_SPEEDS.map((speed) => ({ value: speed, label: LOG_SPEED_LABELS[speed] })),
+        settings.logSpeed,
+        (value) => update({ logSpeed: value as LogSpeed }),
+      ),
+      checkboxRow('문법 색칠', 'syntaxHighlight', settings.syntaxHighlight, (checked) =>
+        update({ syntaxHighlight: checked }),
+      ),
+      checkboxRow('타이핑 연동', 'typingLink', settings.typingLink, (checked) => update({ typingLink: checked })),
+      checkboxRow('패닉 키 사용', 'panicEnabled', settings.panicEnabled, (checked) => update({ panicEnabled: checked })),
+      panicKeyRow(settings.panicKey),
+      fontSizeRow(settings.fontSize),
+      selectRow(
+        '기본 저장 형식',
+        'defaultFormat',
+        FILE_FORMATS.map((format) => ({ value: format, label: FORMAT_LABELS[format] })),
+        settings.defaultFormat,
+        (value) => update({ defaultFormat: value as FileFormat }),
+      ),
+      closeButton,
+    )
+
+    overlay.append(panel)
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) close()
+    })
+    overlay.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return
+      event.stopPropagation()
+      close()
+    })
+    host.append(overlay)
+    panel.querySelector('select')?.focus()
+  }
+
+  return { open, close, isOpen: () => overlay !== null }
+}
