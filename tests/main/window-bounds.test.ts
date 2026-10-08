@@ -19,6 +19,11 @@ describe('창 위치 복원', () => {
     expect(boundsIfVisible(barelyVisible, [laptopScreen])).toBeNull()
   })
 
+  it('제목 표시줄이 화면 위로 벗어나 창을 끌 수 없으면 쓰지 않는다', () => {
+    const titlebarAboveScreen = { x: 100, y: -300, width: 1100, height: 760 }
+    expect(boundsIfVisible(titlebarAboveScreen, [laptopScreen])).toBeNull()
+  })
+
   it('두 번째 모니터에 있던 창은 그 모니터가 있으면 그대로 쓴다', () => {
     const secondScreen = { x: 1920, y: 0, width: 2560, height: 1400 }
     const bounds = { x: 2400, y: 100, width: 1100, height: 760 }
