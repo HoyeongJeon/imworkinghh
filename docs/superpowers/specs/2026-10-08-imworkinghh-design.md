@@ -140,7 +140,7 @@ DOM에 의존하지 않는 순수 모듈이다. 시드를 받는 난수 생성�
 - 기본 테마: Windows는 `windows-terminal`, macOS는 `macos-basic`.
 - 글꼴: `Cascadia Mono`, `Consolas`, `Menlo`, `monospace` 순서. 한글은 `D2Coding`, `Malgun Gothic`, `Apple SD Gothic Neo` 순서로 대체한다.
 
-## 8. 저장과 파일 처리 (`main/files.ts`)
+## 8. 저장과 파일 처리 (`main/documents.ts`, `main/file-service.ts`)
 
 디스크 접근은 main 프로세스에서만 한다. renderer는 preload가 노출한 API만 쓴다.
 
@@ -184,7 +184,7 @@ DOM에 의존하지 않는 순수 모듈이다. 시드를 받는 난수 생성�
 | 열기 실패 | 이유를 알리고 현재 문서는 그대로 둠 |
 | 10MB 이상 파일 | 열기 전에 확인 |
 
-## 9. 설정 (`main/settings.ts`)
+## 9. 설정 (`shared/settings.ts`, `main/settings-store.ts`)
 
 - 위치: `{userData}/settings.json` (Windows `%APPDATA%\imworkinghh`, macOS `~/Library/Application Support/imworkinghh`)
 - 항목: `theme`, `syntaxHighlight`, `panicEnabled`, `panicKey`, `typingLink`, `logSpeed`, `fontSize`, `splitRatio`, `windowBounds`, `lastDirectory`, `lastFile`, `defaultFormat`
@@ -193,34 +193,59 @@ DOM에 의존하지 않는 순수 모듈이다. 시드를 받는 난수 생성�
 
 ## 10. 모듈 구조
 
+하나의 파일은 하나의 역할만 맡는다. 계산과 판단은 순수 함수 파일로, DOM/Electron에 붙는 부분은 별도 파일로 나눈다. 모듈 간 연결은 `main/index.ts`와 `renderer/app.ts`에서만 한다.
+
 ```
 src/
+├─ shared/                    main, preload, renderer가 같이 쓰는 순수 코드
+│  ├─ types.ts                Settings, ThemeId, Eol, Backup 등 기본 타입
+│  ├─ settings.ts             설정 기본값과 교정
+│  ├─ eol.ts                  줄바꿈 감지/변환, OS 기본 줄바꿈
+│  ├─ api.ts                  renderer가 쓰는 API 타입 (ImworkingApi)
+│  └─ ipc-channels.ts         IPC 채널 이름
 ├─ main/
-│  ├─ index.ts          창 생성, 닫기 전 저장 확인
-│  ├─ files.ts          대화상자, 읽기/쓰기, 인코딩, 안전한 쓰기, 백업
-│  ├─ settings.ts       설정 저장/불러오기
-│  └─ menu.ts           macOS 전용 최소 메뉴
-├─ preload/index.ts     contextBridge로 API 노출
-├─ shared/types.ts      Settings, ThemeId, IPC 타입
+│  ├─ index.ts                조립: 저장소, 창, 대화상자, IPC 연결
+│  ├─ text-codec.ts           인코딩 감지와 UTF-8 변환
+│  ├─ file-format.ts          .md/.txt 형식, 확장자, 대화상자 필터
+│  ├─ fs-errors.ts            파일 오류를 한국어 안내로
+│  ├─ atomic-write.ts         임시 파일 + 교체 방식 쓰기, 재시도
+│  ├─ documents.ts            문서 읽기/쓰기 (인코딩, 줄바꿈, 크기 제한)
+│  ├─ file-service.ts         열기/저장 흐름 (대화상자는 주입)
+│  ├─ settings-store.ts       설정 파일 읽기/쓰기
+│  ├─ backup-store.ts         자동 백업 파일 읽기/쓰기/삭제
+│  ├─ window-bounds.ts        저장된 창 위치가 화면 안인지 판단
+│  ├─ window.ts               BrowserWindow 생성, 화면 로드
+│  ├─ dialogs.ts              Electron 대화상자 구현
+│  ├─ close-guard.ts          닫기 전에 renderer에게 확인 요청
+│  ├─ ipc.ts                  IPC 핸들러 등록
+│  └─ menu.ts                 macOS 최소 메뉴
+├─ preload/index.ts           contextBridge로 ImworkingApi 노출
 └─ renderer/
-   ├─ main.ts           조립
-   ├─ titlebar.ts       가짜 터미널 제목줄
-   ├─ splitter.ts       드래그 크기 조절, 패닉 접기/복원
-   ├─ editor.ts         CodeMirror 설정
-   ├─ statusbar.ts      파일명, ●, 줄/칸, 글자수, 인코딩
-   ├─ themes.ts         테마 정의
-   ├─ shortcuts.ts      단축키
-   ├─ settings-dialog.ts 설정 창
-   ├─ fake/
-   │  ├─ scenario.ts    이벤트 생성기
-   │  ├─ pools.ts       재료 목록
-   │  └─ player.ts      출력기
-   └─ styles.css
+   ├─ main.ts                 진입점
+   ├─ app.ts                  조립: 모든 화면 모듈 연결
+   ├─ themes.ts               테마 정의, 프롬프트, CSS 변수
+   ├─ editor.ts               CodeMirror 에디터
+   ├─ document-state.ts       현재 문서 경로/줄바꿈/인코딩, 변경 여부, 백업 스냅샷
+   ├─ document-commands.ts    새 문서/열기/저장/닫기 흐름
+   ├─ autosave.ts             30초 자동 백업 타이머
+   ├─ split-layout.ts         분할 비율 계산, 패닉 접기/복원
+   ├─ splitter.ts             분할 막대 드래그 (DOM)
+   ├─ shortcuts.ts            단축키 해석과 등록
+   ├─ statusbar.ts            상태바 내용과 표시
+   ├─ titlebar.ts             가짜 터미널 제목줄
+   ├─ settings-dialog.ts      설정 창
+   ├─ styles.css
+   └─ fake/
+      ├─ events.ts            FakeEvent, LogSegment, LogSink 타입
+      ├─ rng.ts               시드 고정 난수
+      ├─ pools.ts             파일명·함수명·검색어·diff 재료
+      ├─ scenario.ts          가짜 작업 이벤트 생성기
+      ├─ pacing.ts            속도 배율, 타이핑 연동, 쉬는 중 Thinking
+      ├─ player.ts            이벤트를 시간에 맞춰 LogSink에 출력
+      └─ log-view.ts          LogSink의 DOM 구현 (최대 줄 수, 자동 스크롤)
 ```
 
 Electron 보안 설정: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`.
-
-순수 로직(인코딩 감지, 줄바꿈 처리, 확장자 처리, 설정 병합, 변경 여부, 분할 비율 계산, 속도 배율, 생성기)은 Electron/DOM과 분리된 함수로 만들어 단위 테스트한다.
 
 ## 11. 테스트
 
