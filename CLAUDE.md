@@ -6,6 +6,10 @@
 
 Electron + TypeScript (UI 프레임워크 없음), CodeMirror 6, electron-vite, electron-builder, Vitest (+ jsdom)
 
+## 명령어
+
+`npm run dev` (실행), `npm test` (테스트), `npm run typecheck` (타입 검사), `npm run dist:win` / `npm run dist:mac` (빌드). 자세한 내용은 [`docs/build.md`](docs/build.md).
+
 ## 개발 규칙
 
 예시와 자세한 설명은 [`docs/conventions.md`](docs/conventions.md)에 있다.
@@ -53,5 +57,6 @@ Electron + TypeScript (UI 프레임워크 없음), CodeMirror 6, electron-vite, 
 |---|---|
 | [`DECISIONLOG.md`](DECISIONLOG.md) | 지금까지 내린 결정, 고려한 대안, 이유 |
 | [`docs/conventions.md`](docs/conventions.md) | 개발 규칙의 예시와 자세한 설명 |
+| [`docs/build.md`](docs/build.md) | 개발 실행, Windows/macOS 빌드, 바로가기, 파일 연결 등록, 설정/백업 파일 위치 |
 | [`docs/superpowers/specs/2026-10-08-imworkinghh-design.md`](docs/superpowers/specs/2026-10-08-imworkinghh-design.md) | 설계: 화면, 단축키, 가짜 세션, 에디터, 테마, 저장, 설정, 모듈 구조, 테스트 대상 |
 | [`docs/superpowers/plans/2026-10-08-imworkinghh.md`](docs/superpowers/plans/2026-10-08-imworkinghh.md) | 첫 구현 계획 (Task 1~20) |

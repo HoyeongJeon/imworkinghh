@@ -136,3 +136,9 @@
 - 결정: 실행 인자와 macOS `open-file`로 들어온 파일을 연다. 이미 실행 중이면 기존 창에서 연다. Windows 파일 연결은 HKCU에 등록하는 스크립트로, macOS는 electron-builder `fileAssociations`로 한다.
 - 대안: 앱 안의 열기(Ctrl+O)만 지원, NSIS 설치 프로그램으로 파일 연결 등록
 - 이유: 사용자 요청. 이미 쓰던 글을 탐색기에서 바로 이 앱으로 열 수 있어야 한다. 설치 프로그램 없이 폴더형 배포를 유지하려고 등록 스크립트를 쓴다. Windows는 기본 앱을 프로그램이 마음대로 바꿀 수 없어서 사용자가 한 번 선택해야 한다.
+
+## D-021 Windows는 설치 프로그램 없이 폴더형으로 배포
+- 2026-10-08 / 확정
+- 결정: electron-builder의 `dir` 대상으로 `dist/win-unpacked/`에 실행 파일을 만들고 바탕화면 바로가기로 실행한다. 파일 연결은 `scripts/register-file-types.ps1`로 등록한다 (D-020).
+- 대안: NSIS 설치 프로그램, 단일 portable exe
+- 이유: 설치 과정이 없고 실행이 빠르다. portable exe는 실행할 때마다 압축을 풀어서 느리다. pdf-merger와 같은 방식이다.

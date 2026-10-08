@@ -1,0 +1,21 @@
+appId: com.hoyeongjeon.imworkinghh
+productName: imworkinghh
+directories:
+  output: dist
+files:
+  - out/**/*
+asar: true
+win:
+  target:
+    - dir
+mac:
+  target:
+    - dmg
+  category: public.app-category.productivity
+fileAssociations:
+  - ext: [md, markdown]
+    name: Markdown
+    role: Editor
+  - ext: txt
+    name: Text
+    role: Editor
