@@ -39,6 +39,7 @@ export type ImworkingApi = {
   openPath(path: string, options?: { reportErrors?: boolean }): Promise<OpenResult>
   takeRequestedFile(): Promise<string | null>
   onFileOpenRequested(listener: (path: string) => void): void
+  pathForFile(file: File): string
   saveFile(request: SaveRequest): Promise<SaveResult>
   confirmDiscard(): Promise<DiscardChoice>
   askRestoreBackup(savedAt: string): Promise<boolean>

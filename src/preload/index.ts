@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { ImworkingApi } from '../shared/api'
 import { defaultEol } from '../shared/eol'
 import { IpcChannel } from '../shared/ipc-channels'
@@ -14,6 +14,7 @@ const api: ImworkingApi = {
   onFileOpenRequested: (listener) => {
     ipcRenderer.on(IpcChannel.fileOpenRequested, (_event, path: string) => listener(path))
   },
+  pathForFile: (file) => webUtils.getPathForFile(file),
   saveFile: (request) => ipcRenderer.invoke(IpcChannel.saveFile, request),
   confirmDiscard: () => ipcRenderer.invoke(IpcChannel.confirmDiscard),
   askRestoreBackup: (savedAt) => ipcRenderer.invoke(IpcChannel.askRestoreBackup, savedAt),

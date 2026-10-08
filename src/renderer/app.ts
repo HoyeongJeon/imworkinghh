@@ -2,10 +2,12 @@ import type { ImworkingApi } from '../shared/api'
 import { FONT_SIZE_RANGE } from '../shared/settings'
 import type { Settings, ThemeId } from '../shared/types'
 import { createAutosave } from './autosave'
+import { createCloseHandler } from './close-handler'
 import { createDocumentCommands, type CommandsApi } from './document-commands'
 import { createDocumentState } from './document-state'
 import { createEditor, type CursorPosition } from './editor'
 import { createLogView } from './fake/log-view'
+import { installFileDrop } from './file-drop'
 import { createTypingActivity, delayMultiplier, withIdleThinking } from './fake/pacing'
 import { createPlayer } from './fake/player'
 import { createSessionStream } from './fake/scenario'
@@ -203,11 +205,19 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     { passive: false },
   )
 
-  api.onCloseRequested(async () => {
-    // 닫기 확인 창이 떠 있는 동안 자동 백업이 버리기로 한 글을 다시 쓰지 않게 멈춘다.
-    autosave.stop()
-    const closed = await commands.close()
-    if (!closed) autosave.start()
+  let startupFinished = false
+  api.onCloseRequested(
+    createCloseHandler({
+      isStartupFinished: () => startupFinished,
+      closeDocument: () => commands.close(),
+      closeWindowNow: () => api.closeWindowNow(),
+      pauseAutosave: () => autosave.stop(),
+      resumeAutosave: () => autosave.start(),
+    }),
+  )
+  installFileDrop(doc, {
+    pathForFile: (file) => api.pathForFile(file),
+    onFileDropped: (path) => void commands.openRequestedFile(path),
   })
 
   applySettings(null)
@@ -225,6 +235,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     updateSettings({ lastFile: null })
   }
   api.onFileOpenRequested((path) => void commands.openRequestedFile(path))
+  startupFinished = true
 
   autosave.start()
   editor.focus()

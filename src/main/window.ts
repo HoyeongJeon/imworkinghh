@@ -17,6 +17,9 @@ export function createMainWindow({ platform, bounds, preloadPath }: MainWindowOp
     titleBarStyle: isMac ? 'hiddenInset' : undefined,
     webPreferences: { preload: preloadPath, contextIsolation: true, nodeIntegration: false, sandbox: true },
   })
+  // 파일을 창에 놓거나 링크가 열리면 Chromium이 앱 화면을 다른 페이지로 바꿔서 쓰던 글이 사라진다.
+  window.webContents.on('will-navigate', (event) => event.preventDefault())
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.once('ready-to-show', () => window.show())
   return window
 }

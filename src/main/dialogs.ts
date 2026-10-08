@@ -1,5 +1,6 @@
 import { dialog, type BrowserWindow } from 'electron'
 import type { DiscardChoice } from '../shared/api'
+import { restoreBackupDialog } from './dialog-options'
 import { OPEN_DIALOG_FILTERS, saveDialogFilters } from './file-format'
 import type { FileDialogs } from './file-service'
 
@@ -59,15 +60,9 @@ export function createElectronDialogs(window: BrowserWindow): AppDialogs {
     },
 
     async askRestoreBackup(savedAt) {
-      const { response } = await dialog.showMessageBox(window, {
-        type: 'question',
-        buttons: ['복구', '버리기'],
-        defaultId: 0,
-        cancelId: 1,
-        message: '저장되지 않은 글이 있습니다.',
-        detail: `${new Date(savedAt).toLocaleString('ko-KR')}에 자동 백업된 내용을 복구할까요?`,
-      })
-      return response === 0
+      const { options, choseRestore } = restoreBackupDialog(savedAt)
+      const { response } = await dialog.showMessageBox(window, options)
+      return choseRestore(response)
     },
   }
 }
