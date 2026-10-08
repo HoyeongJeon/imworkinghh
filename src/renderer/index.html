@@ -6,10 +6,17 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws:"
     />
-    <title>imworkinghh</title>
+    <title>Windows PowerShell</title>
   </head>
   <body>
-    <div id="app"></div>
+    <header id="titlebar"></header>
+    <main id="workspace">
+      <section id="log" aria-label="session log"></section>
+      <div id="split-handle" role="separator" aria-orientation="horizontal"></div>
+      <section id="editor"></section>
+    </main>
+    <footer id="statusbar"></footer>
+    <div id="dialog-host"></div>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

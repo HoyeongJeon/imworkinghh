@@ -25,7 +25,7 @@ export function loadRenderer(window: BrowserWindow, rendererDirectory: string): 
   const devServerUrl = process.env['ELECTRON_RENDERER_URL']
   if (devServerUrl) {
     void window.loadURL(devServerUrl)
-    window.webContents.openDevTools({ mode: 'detach' })
+    if (process.env['IMWORKING_DEVTOOLS'] === '1') window.webContents.openDevTools({ mode: 'detach' })
     return
   }
   void window.loadFile(join(rendererDirectory, 'index.html'))
