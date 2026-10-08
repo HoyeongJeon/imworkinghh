@@ -33,6 +33,29 @@ export type DocumentCommands = {
 
 export function createDocumentCommands(deps: DocumentCommandsDeps): DocumentCommands {
   const { api, editor, documentState } = deps
+  let running: Promise<boolean> | null = null
+
+  function track(command: Promise<boolean>): Promise<boolean> {
+    running = command
+    const clear = () => {
+      if (running === command) running = null
+    }
+    command.then(clear, clear)
+    return command
+  }
+
+  // 저장 창 같은 대화 상자가 떠 있는 동안 단축키를 또 누르면 창이 겹쳐 뜨므로, 진행 중인 명령이 있으면 무시한다.
+  function unlessBusy<Args extends unknown[]>(command: (...args: Args) => Promise<boolean>) {
+    return (...args: Args): Promise<boolean> => (running ? Promise.resolve(false) : track(command(...args)))
+  }
+
+  // 다른 프로그램에서 연 파일은 다시 요청할 방법이 없으므로 버리지 않고 진행 중인 명령이 끝나기를 기다린다.
+  function afterRunning<Args extends unknown[]>(command: (...args: Args) => Promise<boolean>) {
+    return async (...args: Args): Promise<boolean> => {
+      while (running) await running.catch(() => false)
+      return track(command(...args))
+    }
+  }
 
   async function saveDocument(saveAs: boolean): Promise<boolean> {
     const text = editor.getText()
@@ -61,7 +84,7 @@ export function createDocumentCommands(deps: DocumentCommandsDeps): DocumentComm
   }
 
   return {
-    async newDocument() {
+    newDocument: unlessBusy(async () => {
       if (!(await resolveUnsavedChanges())) return false
       documentState.startNew()
       editor.setText('')
@@ -69,43 +92,43 @@ export function createDocumentCommands(deps: DocumentCommandsDeps): DocumentComm
       deps.onDocumentReplaced()
       deps.onFileLocationChanged(null)
       return true
-    },
+    }),
 
-    async open() {
+    open: unlessBusy(async () => {
       if (!(await resolveUnsavedChanges())) return false
       const result = await api.openFileDialog(deps.savePreferences().defaultDirectory)
       if (result.status !== 'opened') return false
       showOpenedFile(result.file)
       await api.clearBackup()
       return true
-    },
+    }),
 
-    save: () => saveDocument(false),
+    save: unlessBusy(() => saveDocument(false)),
 
-    saveAs: () => saveDocument(true),
+    saveAs: unlessBusy(() => saveDocument(true)),
 
-    async close() {
+    close: unlessBusy(async () => {
       if (!(await resolveUnsavedChanges())) return false
       await api.clearBackup()
       api.closeWindowNow()
       return true
-    },
+    }),
 
-    async openPath(path) {
+    openPath: unlessBusy(async (path: string) => {
       const result = await api.openPath(path)
       if (result.status !== 'opened') return false
       showOpenedFile(result.file)
       return true
-    },
+    }),
 
-    async openRequestedFile(path) {
+    openRequestedFile: afterRunning(async (path: string) => {
       if (!(await resolveUnsavedChanges())) return false
       const result = await api.openPath(path, { reportErrors: true })
       if (result.status !== 'opened') return false
       showOpenedFile(result.file)
       await api.clearBackup()
       return true
-    },
+    }),
 
     restoreBackup(backup) {
       documentState.loadUnsaved(backup)

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   createDocumentCommands,
   type CommandsApi,
@@ -247,5 +247,48 @@ describe('다른 프로그램에서 열기', () => {
     expect(text()).toBe('# 열린 글')
     expect(calls).toContain('clearBackup')
     expect(locations.at(-1)).toMatchObject({ path: '/notes/a.md', origin: 'opened' })
+  })
+})
+
+describe('명령 겹침', () => {
+  function pendingSave() {
+    let finish: () => void = () => undefined
+    const saveFile: CommandsApi['saveFile'] = (request) =>
+      new Promise((resolve) => {
+        finish = () => resolve({ status: 'saved', path: request.path ?? '/notes/new.md', directory: '/notes', format: 'md' })
+      })
+    return { saveFile, finish: () => finish() }
+  }
+
+  it('저장 창이 떠 있는 동안 다시 누른 저장은 무시한다', async () => {
+    const pending = pendingSave()
+    const saveFile = vi.fn(pending.saveFile)
+    const { api } = createFakeApi({ saveFile })
+    const { commands } = setup(api)
+    const first = commands.save()
+    expect(await commands.save()).toBe(false)
+    pending.finish()
+    expect(await first).toBe(true)
+    expect(saveFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('다른 프로그램에서 연 파일은 진행 중인 명령이 끝난 뒤에 연다', async () => {
+    const pending = pendingSave()
+    const { api, calls } = createFakeApi({
+      saveFile: pending.saveFile,
+      openPath: async (path) => {
+        calls.push(`openPath ${path}`)
+        return { status: 'opened', file: openedFile }
+      },
+    })
+    const { commands, text } = setup(api)
+    const saving = commands.save()
+    const opening = commands.openRequestedFile('/notes/a.md')
+    await Promise.resolve()
+    expect(calls).not.toContain('openPath /notes/a.md')
+    pending.finish()
+    await saving
+    expect(await opening).toBe(true)
+    expect(text()).toBe('# 열린 글')
   })
 })

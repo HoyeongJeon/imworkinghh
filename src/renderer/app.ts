@@ -229,12 +229,13 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   if (backup && restored) commands.restoreBackup(backup)
   else if (backup) await api.clearBackup()
 
+  // main은 대기 중인 파일을 넘겨준 뒤부터 요청을 바로 보내므로, 그보다 먼저 받을 준비를 해야 요청이 사라지지 않는다.
+  api.onFileOpenRequested((path) => void commands.openRequestedFile(path))
   const requestedFile = await api.takeRequestedFile()
   if (requestedFile) await commands.openRequestedFile(requestedFile)
   else if (!restored && settings.lastFile && !(await commands.openPath(settings.lastFile))) {
     updateSettings({ lastFile: null })
   }
-  api.onFileOpenRequested((path) => void commands.openRequestedFile(path))
   startupFinished = true
 
   autosave.start()
