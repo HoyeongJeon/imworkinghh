@@ -95,6 +95,8 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     parent: elementById('editor'),
     initialText: '',
     syntaxHighlight: settings.syntaxHighlight,
+    fontSize: settings.fontSize,
+    lineNumbersVisible: !settings.stealthMode,
     onTextChanged: () => documentStatus.schedule(),
     onCursorMoved: (position) => {
       cursor = position

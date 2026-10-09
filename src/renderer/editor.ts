@@ -16,12 +16,15 @@ export type Editor = {
   setLineNumbersVisible(visible: boolean): void
   setFontSize(px: number): void
   focus(): void
+  destroy(): void
 }
 
 export type EditorOptions = {
   parent: HTMLElement
   initialText: string
   syntaxHighlight: boolean
+  fontSize: number
+  lineNumbersVisible: boolean
   onTextChanged(): void
   onCursorMoved(position: CursorPosition): void
   onUserTyped(): void
@@ -47,8 +50,6 @@ function highlightExtensions(enabled: boolean): Extension {
   if (!enabled) return []
   return [markdown({ base: markdownLanguage, codeLanguages: languages }), syntaxHighlighting(markdownHighlightStyle)]
 }
-
-const DEFAULT_FONT_SIZE_PX = 14
 
 function fontSizeTheme(px: number): Extension {
   return EditorView.theme({ '&': { fontSize: `${px}px` } })
@@ -109,9 +110,9 @@ export function createEditor(options: EditorOptions): Editor {
   const highlightCompartment = new Compartment()
   const fontSizeCompartment = new Compartment()
   const lineNumbersCompartment = new Compartment()
-  let lineNumbersVisible = true
+  let lineNumbersVisible = options.lineNumbersVisible
   let syntaxHighlightEnabled = options.syntaxHighlight
-  let fontSizePx = DEFAULT_FONT_SIZE_PX
+  let fontSizePx = options.fontSize
 
   const notifyChanges = EditorView.updateListener.of((update) => {
     if (update.docChanged) {
@@ -164,5 +165,6 @@ export function createEditor(options: EditorOptions): Editor {
       view.dispatch({ effects: fontSizeCompartment.reconfigure(fontSizeTheme(px)) })
     },
     focus: () => view.focus(),
+    destroy: () => view.destroy(),
   }
 }

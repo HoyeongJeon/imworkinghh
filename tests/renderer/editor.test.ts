@@ -5,7 +5,7 @@ import { EditorView } from '@codemirror/view'
 import { describe, expect, it } from 'vitest'
 import { createEditor, type CursorPosition } from '../../src/renderer/editor'
 
-function setup(initialText = '# 제목') {
+function setup(initialText = '# 제목', display = { fontSize: 14, lineNumbersVisible: true }) {
   const parent = document.createElement('div')
   document.body.append(parent)
   const changeNotices: unknown[][] = []
@@ -15,12 +15,14 @@ function setup(initialText = '# 제목') {
     parent,
     initialText,
     syntaxHighlight: true,
+    fontSize: display.fontSize,
+    lineNumbersVisible: display.lineNumbersVisible,
     onTextChanged: (...args: unknown[]) => changeNotices.push(args),
     onCursorMoved: (position) => cursorPositions.push(position),
     onUserTyped: () => typedCount++,
   })
   const view = () => EditorView.findFromDOM(parent.querySelector('.cm-editor') as HTMLElement)!
-  return { editor, view, changeNotices, cursorPositions, typedCount: () => typedCount }
+  return { editor, parent, view, changeNotices, cursorPositions, typedCount: () => typedCount }
 }
 
 describe('글쓰기 에디터', () => {
@@ -114,5 +116,17 @@ describe('글쓰기 에디터', () => {
     const { editor, view } = setup()
     editor.setFontSize(20)
     expect(getComputedStyle(view().dom).fontSize).toBe('20px')
+  })
+
+  it('처음 받은 글꼴 크기와 줄 번호 표시로 시작한다', () => {
+    const { view } = setup('', { fontSize: 20, lineNumbersVisible: false })
+    expect(getComputedStyle(view().dom).fontSize).toBe('20px')
+    expect(view().dom.querySelector('.cm-visual-line-numbers')).toBeNull()
+  })
+
+  it('없애면 에디터가 화면에서 사라진다', () => {
+    const { editor, parent } = setup()
+    editor.destroy()
+    expect(parent.querySelector('.cm-editor')).toBeNull()
   })
 })
