@@ -48,6 +48,7 @@ Electron + TypeScript (UI 프레임워크 없음), CodeMirror 6, electron-vite, 
 | 자동 백업 주기 | 30초 |
 | 큰 파일 기준 | 10MB |
 | 상태바 글자수 다시 세기 | 입력이 150ms 멈췄을 때 |
+| 나란히 쓰기 최대 칸 수 / 칸 최소 너비 | 2칸 / 240px |
 | 로그 속도 배율 | 느림 1.6 / 보통 1.0 / 빠름 0.5 |
 | 타이핑 연동 | 마지막 입력 후 3초 이내면 배율 0.5, 15초 넘게 입력이 없으면 쉬는 상태 |
 | 글꼴 | `'Cascadia Mono', Consolas, Menlo, 'D2Coding', 'Malgun Gothic', 'Apple SD Gothic Neo', monospace` |
@@ -60,4 +61,5 @@ Electron + TypeScript (UI 프레임워크 없음), CodeMirror 6, electron-vite, 
 | [`docs/conventions.md`](docs/conventions.md) | 개발 규칙의 예시와 자세한 설명 |
 | [`docs/build.md`](docs/build.md) | 개발 실행, Windows/macOS 빌드, 바로가기, 파일 연결 등록, 설정/백업 파일 위치 |
 | [`docs/superpowers/specs/2026-10-08-imworkinghh-design.md`](docs/superpowers/specs/2026-10-08-imworkinghh-design.md) | 설계: 화면, 단축키, 가짜 세션, 에디터, 테마, 저장, 설정, 모듈 구조, 테스트 대상 |
+| [`docs/superpowers/specs/2026-10-09-side-by-side-panes-design.md`](docs/superpowers/specs/2026-10-09-side-by-side-panes-design.md) | 나란히 쓰기 설계: 칸 조작, 저장·백업·복구, 칸 구조 |
 | [`docs/superpowers/plans/2026-10-08-imworkinghh.md`](docs/superpowers/plans/2026-10-08-imworkinghh.md) | 첫 구현 계획 (Task 1~20) |
