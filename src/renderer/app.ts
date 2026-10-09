@@ -1,28 +1,32 @@
 import type { ImworkingApi } from '../shared/api'
+import { MAX_PANES } from '../shared/panes'
 import { FONT_SIZE_RANGE } from '../shared/settings'
 import type { Settings, ThemeId } from '../shared/types'
-import { backupSetOf, createAutosave, unsavedPaneCount } from './autosave'
+import { backupSetOf, createAutosave } from './autosave'
 import { createCloseHandler } from './close-handler'
 import { createCommandLock } from './command-lock'
 import { createDebouncedTask } from './debounce'
 import { createDocumentCommands, type CommandsApi } from './document-commands'
+import { createDocumentPane, type DocumentPane } from './document-pane'
 import { createDocumentState } from './document-state'
-import { createEditor, type CursorPosition } from './editor'
+import { createEditor } from './editor'
 import { createLogView } from './fake/log-view'
 import { installFileDrop } from './file-drop'
 import { createTypingActivity, delayMultiplier, withIdleThinking } from './fake/pacing'
 import { createPlayer } from './fake/player'
 import { createSessionStream } from './fake/scenario'
+import { PANE_DIVIDER_PX, createPaneLayout } from './pane-dividers'
+import { createPaneSet, type PaneChange } from './pane-set'
+import { MIN_PANE_WIDTH_PX, canAddPane, equalWidths, widthsAfterAdd, widthsAfterRemove } from './pane-widths'
 import { createSettingsDialog } from './settings-dialog'
 import { APP_SHORTCUTS, bindShortcuts } from './shortcuts'
 import { createPanicToggle } from './split-layout'
 import { createSplitter } from './splitter'
-import { UNTITLED_NAME, countCharacters, createStatusbar } from './statusbar'
+import { UNTITLED_NAME, createStatusbar } from './statusbar'
 import { createSessionHider, windowTitleFor } from './stealth'
 import { THEMES, getTheme, nextThemeId, renderPrompt, themeCssVariables } from './themes'
 import { createTitlebar } from './titlebar'
-
-const DOCUMENT_STATUS_DELAY_MS = 150
+import { createWorkspaceCommands, panesToRestore } from './workspace-commands'
 
 export async function startApp(api: ImworkingApi, doc: Document): Promise<void> {
   const elementById = (id: string): HTMLElement => {
@@ -32,8 +36,9 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   }
 
   let settings = await api.loadSettings()
-  let documentStats = { dirty: false, characters: 0 }
-  let cursor: CursorPosition = { line: 1, column: 1 }
+  const startupOpenFiles = settings.openFiles
+  const startupPaneWidths = settings.paneWidths
+  let startupFinished = false
 
   const titlebar = createTitlebar(elementById('titlebar'), {
     platform: api.platform,
@@ -44,7 +49,6 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     },
   })
   const statusbar = createStatusbar(elementById('statusbar'))
-  const documentState = createDocumentState(api.defaultEol)
 
   const typingActivity = createTypingActivity(() => Date.now())
   const sessionStream = createSessionStream(Date.now(), (project) => renderPrompt(getTheme(settings.theme), project))
@@ -56,26 +60,19 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   })
 
   function refreshStatus(): void {
-    statusbar.update({
-      fileName: documentState.fileName(),
-      dirty: documentStats.dirty,
-      line: cursor.line,
-      column: cursor.column,
-      characters: documentStats.characters,
-      encoding: documentState.info().encoding,
-      logPaused: settings.stealthMode && player.isPaused(),
-    })
+    statusbar.update({ ...panes.focused().status(), logPaused: settings.stealthMode && player.isPaused() })
     refreshWindowTitle()
   }
 
   let renderedTitlebar = ''
   function refreshWindowTitle(): void {
     const theme = getTheme(settings.theme)
+    const { fileName, dirty } = panes.focused().status()
     const title = windowTitleFor({
       stealthMode: settings.stealthMode,
       disguisedTitle: theme.windowTitle,
-      documentName: documentState.fileName() ?? UNTITLED_NAME,
-      dirty: documentStats.dirty,
+      documentName: fileName ?? UNTITLED_NAME,
+      dirty,
     })
     doc.title = title
     const titlebarKey = `${theme.titlebarStyle}|${title}`
@@ -84,26 +81,106 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     titlebar.render(theme.titlebarStyle, title)
   }
 
-  // 글 전체를 읽어 세는 일은 큰 글에서 무거우므로, 입력할 때마다 하지 않고 입력이 잠깐 멈췄을 때 한다.
-  const documentStatus = createDebouncedTask(() => {
-    const text = editor.getText()
-    documentStats = { dirty: documentState.isDirty(text), characters: countCharacters(text) }
-    refreshStatus()
-  }, DOCUMENT_STATUS_DELAY_MS)
+  const commandLock = createCommandLock()
+  const commandsApi: CommandsApi = {
+    openFileDialog: (directory) => api.openFileDialog(directory),
+    openPath: (path, options) => api.openPath(path, options),
+    saveFile: (request) => api.saveFile(request),
+    confirmDiscard: () => api.confirmDiscard(),
+  }
+  const paneParts = { createEditor, createDocumentState, createDocumentCommands, createDebouncedTask }
 
-  const editor = createEditor({
-    parent: elementById('editor'),
-    initialText: '',
-    syntaxHighlight: settings.syntaxHighlight,
-    fontSize: settings.fontSize,
-    lineNumbersVisible: !settings.stealthMode,
-    onTextChanged: () => documentStatus.schedule(),
-    onCursorMoved: (position) => {
-      cursor = position
-      refreshStatus()
+  function openFilePaths(): string[] {
+    return panes.all().flatMap((pane) => {
+      const path = pane.filePath()
+      return path ? [path] : []
+    })
+  }
+
+  function createPane(): DocumentPane {
+    const pane: DocumentPane = createDocumentPane({
+      doc,
+      parts: paneParts,
+      defaultEol: api.defaultEol,
+      display: {
+        syntaxHighlight: settings.syntaxHighlight,
+        fontSize: settings.fontSize,
+        // 터미널에는 줄 번호가 없으므로 은신 모드에서는 숨긴다.
+        lineNumbersVisible: !settings.stealthMode,
+      },
+      api: commandsApi,
+      lock: commandLock,
+      savePreferences: () => ({ defaultDirectory: settings.lastDirectory, defaultFormat: settings.defaultFormat }),
+      focusIfOpenElsewhere: (path) => workspace.focusPaneWithFile(path, pane),
+      onFileLocationChanged: (location) => {
+        const patch: Partial<Settings> = { openFiles: openFilePaths() }
+        if (location) patch.lastDirectory = location.directory
+        if (location?.origin === 'saved') patch.defaultFormat = location.format
+        updateSettings(patch)
+      },
+      onBackupStale: () => void autosave.flushNow(),
+      onStatusChanged: () => {
+        if (panes.focused() === pane) refreshStatus()
+      },
+      onUserTyped: () => typingActivity.markTyped(),
+      onFocused: () => panes.focus(pane),
+    })
+    return pane
+  }
+
+  let paneWidths = [1]
+  const paneLayout = createPaneLayout({
+    host: elementById('editor'),
+    minPanePx: MIN_PANE_WIDTH_PX,
+    onWidthsCommitted: (widths) => {
+      paneWidths = widths
+      updateSettings({ paneWidths })
     },
-    onUserTyped: () => typingActivity.markTyped(),
   })
+
+  function paneAreaWidth(paneCount: number): number {
+    return paneLayout.hostWidth() - PANE_DIVIDER_PX * (paneCount - 1)
+  }
+
+  function renderPanes(): void {
+    paneLayout.render(
+      panes.all().map((pane) => pane.element),
+      paneWidths,
+    )
+  }
+
+  function onPanesChanged(change: PaneChange): void {
+    if (change.kind === 'added') {
+      const area = paneAreaWidth(panes.all().length)
+      paneWidths = widthsAfterAdd(paneWidths, change.index - 1, area > 0 ? MIN_PANE_WIDTH_PX / area : 1)
+    }
+    if (change.kind === 'removed') paneWidths = widthsAfterRemove(paneWidths, change.index)
+    if (change.kind !== 'focused') {
+      renderPanes()
+      if (startupFinished) updateSettings({ openFiles: openFilePaths(), paneWidths })
+    }
+    refreshStatus()
+  }
+
+  const panes = createPaneSet<DocumentPane>({
+    maxPanes: MAX_PANES,
+    createPane,
+    destroyPane: (pane) => pane.destroy(),
+    onChanged: onPanesChanged,
+  })
+  renderPanes()
+
+  const workspace = createWorkspaceCommands({
+    panes,
+    maxPanes: MAX_PANES,
+    onBackupStale: () => void autosave.flushNow(),
+    clearBackup: () => api.clearBackup(),
+    closeWindowNow: () => api.closeWindowNow(),
+  })
+
+  function forEachPane(apply: (pane: DocumentPane) => void): void {
+    for (const pane of panes.all()) apply(pane)
+  }
 
   const sessionHider = createSessionHider(player)
   const panic = createPanicToggle()
@@ -127,7 +204,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   function applyStealthMode(): void {
     elementById('workspace').classList.toggle('session-hidden', !settings.stealthMode)
     // 터미널에는 줄 번호가 없으므로 은신 모드에서는 숨긴다.
-    editor.setLineNumbersVisible(!settings.stealthMode)
+    forEachPane((pane) => pane.setLineNumbersVisible(!settings.stealthMode))
     if (settings.stealthMode) {
       sessionHider.show()
     } else {
@@ -141,9 +218,11 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     if (!previous || previous.theme !== settings.theme) applyTheme(settings.theme)
     if (!previous || previous.stealthMode !== settings.stealthMode) applyStealthMode()
     if (previous && previous.syntaxHighlight !== settings.syntaxHighlight) {
-      editor.setSyntaxHighlight(settings.syntaxHighlight)
+      forEachPane((pane) => pane.setSyntaxHighlight(settings.syntaxHighlight))
     }
-    editor.setFontSize(settings.fontSize)
+    if (previous && previous.fontSize !== settings.fontSize) {
+      forEachPane((pane) => pane.setFontSize(settings.fontSize))
+    }
   }
 
   function updateSettings(patch: Partial<Settings>): void {
@@ -164,7 +243,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
       settingsDialog.close()
       ;(doc.activeElement as HTMLElement | null)?.blur()
     } else {
-      editor.focus()
+      panes.focused().focus()
     }
   }
 
@@ -172,6 +251,22 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     if (player.isPaused()) player.resume()
     else player.pause()
     refreshStatus()
+  }
+
+  function addPane(): void {
+    const count = panes.all().length
+    if (!canAddPane(count, paneAreaWidth(count + 1), MIN_PANE_WIDTH_PX)) return
+    workspace.addPane()
+  }
+
+  function focusNextPane(): void {
+    panes.focusNext()
+    panes.focused().focus()
+  }
+
+  // 시작할 때 백업 복구는 명령 잠금을 쓰므로, 그 전에 들어온 문서 명령이 잠금을 먼저 잡으면 복구한 글이 에디터에 들어가지 못한다.
+  const afterStartup = (run: () => void) => () => {
+    if (startupFinished) run()
   }
 
   const settingsDialog = createSettingsDialog({
@@ -182,43 +277,23 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   })
 
   const autosave = createAutosave({
-    takeSnapshot: () => backupSetOf([documentState.snapshot(editor.getText())], new Date().toISOString()),
+    takeSnapshot: () => backupSetOf(panes.all().map((pane) => pane.snapshot()), new Date().toISOString()),
     writeBackup: (backup) => api.writeBackup(backup),
     clearBackup: () => api.clearBackup(),
   })
 
-  const commandsApi: CommandsApi = {
-    openFileDialog: (directory) => api.openFileDialog(directory),
-    openPath: (path, options) => api.openPath(path, options),
-    saveFile: (request) => api.saveFile(request),
-    confirmDiscard: () => api.confirmDiscard(),
-  }
-
-  const commands = createDocumentCommands({
-    api: commandsApi,
-    lock: createCommandLock(),
-    editor,
-    documentState,
-    savePreferences: () => ({ defaultDirectory: settings.lastDirectory, defaultFormat: settings.defaultFormat }),
-    focusIfOpenElsewhere: () => false,
-    onFileLocationChanged: (location) => {
-      if (!location) updateSettings({ openFiles: [] })
-      else if (location.origin === 'saved')
-        updateSettings({ openFiles: [location.path], lastDirectory: location.directory, defaultFormat: location.format })
-      else updateSettings({ openFiles: [location.path], lastDirectory: location.directory })
-      documentStatus.runNow()
-    },
-    onDocumentReplaced: () => documentStatus.runNow(),
-    onBackupStale: () => void autosave.flushNow(),
-  })
+  const focusedCommands = () => panes.focused().commands
 
   bindShortcuts(
     doc.defaultView ?? window,
     [
-      { combo: () => APP_SHORTCUTS.newDocument, run: () => void commands.newDocument() },
-      { combo: () => APP_SHORTCUTS.open, run: () => void commands.open() },
-      { combo: () => APP_SHORTCUTS.save, run: () => void commands.save() },
-      { combo: () => APP_SHORTCUTS.saveAs, run: () => void commands.saveAs() },
+      { combo: () => APP_SHORTCUTS.newDocument, run: afterStartup(() => void focusedCommands().newDocument()) },
+      { combo: () => APP_SHORTCUTS.open, run: afterStartup(() => void focusedCommands().open()) },
+      { combo: () => APP_SHORTCUTS.save, run: afterStartup(() => void focusedCommands().save()) },
+      { combo: () => APP_SHORTCUTS.saveAs, run: afterStartup(() => void focusedCommands().saveAs()) },
+      { combo: () => APP_SHORTCUTS.addPane, run: afterStartup(addPane) },
+      { combo: () => APP_SHORTCUTS.closePane, run: afterStartup(() => void workspace.closeFocusedPane()) },
+      { combo: () => APP_SHORTCUTS.nextPane, run: afterStartup(focusNextPane) },
       {
         combo: () => APP_SHORTCUTS.openSettings,
         run: () => (settingsDialog.isOpen() ? settingsDialog.close() : settingsDialog.open(settings)),
@@ -251,16 +326,10 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     { passive: false },
   )
 
-  let startupFinished = false
   api.onCloseRequested(
     createCloseHandler({
       isStartupFinished: () => startupFinished,
-      closeWindow: async () => {
-        if (!(await commands.confirmClose())) return false
-        await api.clearBackup()
-        api.closeWindowNow()
-        return true
-      },
+      closeWindow: () => workspace.closeWindow(),
       closeWindowNow: () => api.closeWindowNow(),
       pauseAutosave: () => autosave.stop(),
       resumeAutosave: () => autosave.start(),
@@ -268,7 +337,11 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   )
   installFileDrop(doc, {
     pathForFile: (file) => api.pathForFile(file),
-    onFileDropped: (path) => void commands.openRequestedFile(path),
+    onFileDropped: (path, dropTarget) => {
+      if (!startupFinished) return
+      const target = panes.all().find((pane) => dropTarget instanceof Node && pane.element.contains(dropTarget))
+      void workspace.openRequestedFile(path, target)
+    },
   })
 
   applySettings(null)
@@ -276,22 +349,25 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   player.start()
 
   const backup = await api.readBackup()
-  const unsavedCount = backup ? unsavedPaneCount(backup) : 0
+  const unsavedCount = backup
+    ? panesToRestore(backup.panes, MAX_PANES).filter((pane) => pane.unsavedContent !== null).length
+    : 0
   const restored = backup !== null && unsavedCount > 0 && (await api.askRestoreBackup(backup.savedAt, unsavedCount))
-  const restoredPane = backup?.panes.find((pane) => pane.unsavedContent !== null)
-  if (restored && restoredPane) await commands.restore(restoredPane)
+  if (backup && restored) await workspace.restore(backup)
   else if (backup) await api.clearBackup()
 
   // main은 대기 중인 파일을 넘겨준 뒤부터 요청을 바로 보내므로, 그보다 먼저 받을 준비를 해야 요청이 사라지지 않는다.
-  api.onFileOpenRequested((path) => void commands.openRequestedFile(path))
+  api.onFileOpenRequested((path) => void workspace.openRequestedFile(path))
   const requestedFile = await api.takeRequestedFile()
-  const [lastOpenFile] = settings.openFiles
-  if (requestedFile) await commands.openRequestedFile(requestedFile)
-  else if (!restored && lastOpenFile && !(await commands.openPath(lastOpenFile))) {
-    updateSettings({ openFiles: [] })
-  }
+  if (requestedFile) await workspace.openRequestedFile(requestedFile)
+  else if (!restored) await workspace.reopen(startupOpenFiles)
+
+  const paneCount = panes.all().length
+  paneWidths = startupPaneWidths.length === paneCount ? [...startupPaneWidths] : equalWidths(paneCount)
+  renderPanes()
   startupFinished = true
+  updateSettings({ openFiles: openFilePaths(), paneWidths })
 
   autosave.start()
-  editor.focus()
+  panes.focused().focus()
 }
