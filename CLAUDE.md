@@ -63,3 +63,4 @@ Electron + TypeScript (UI 프레임워크 없음), CodeMirror 6, electron-vite, 
 | [`docs/superpowers/specs/2026-10-08-imworkinghh-design.md`](docs/superpowers/specs/2026-10-08-imworkinghh-design.md) | 설계: 화면, 단축키, 가짜 세션, 에디터, 테마, 저장, 설정, 모듈 구조, 테스트 대상 |
 | [`docs/superpowers/specs/2026-10-09-side-by-side-panes-design.md`](docs/superpowers/specs/2026-10-09-side-by-side-panes-design.md) | 나란히 쓰기 설계: 칸 조작, 저장·백업·복구, 칸 구조 |
 | [`docs/superpowers/plans/2026-10-08-imworkinghh.md`](docs/superpowers/plans/2026-10-08-imworkinghh.md) | 첫 구현 계획 (Task 1~20) |
+| [`docs/superpowers/plans/2026-10-09-side-by-side-panes.md`](docs/superpowers/plans/2026-10-09-side-by-side-panes.md) | 나란히 쓰기 구현 계획 (Task 1~11) |
