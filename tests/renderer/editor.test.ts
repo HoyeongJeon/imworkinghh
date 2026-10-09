@@ -69,6 +69,16 @@ describe('글쓰기 에디터', () => {
     expect(cursorPositions.at(-1)).toEqual({ line: 2, column: 2 })
   })
 
+  it('줄 번호 칸은 화면에 보이는 줄마다 번호를 붙이는 번호 칸을 쓴다', () => {
+    const { editor, view } = setup()
+    editor.setText('첫 줄\n둘째 줄')
+    const visibleRows = view().dom.querySelectorAll(
+      '.cm-visual-line-numbers .cm-gutterElement:not([style*="hidden"]) .cm-visual-row',
+    )
+    const numbers = [...visibleRows].map((row) => row.textContent)
+    expect(numbers).toEqual(['1', '2'])
+  })
+
   it('문법 색칠을 끄면 마크다운으로 해석하지 않고 다시 켜면 해석한다', () => {
     const { editor, view } = setup()
     expect(view().state.facet(language)).not.toBeNull()
