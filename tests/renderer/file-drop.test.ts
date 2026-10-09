@@ -10,11 +10,15 @@ function dropEvent(type: 'drop' | 'dragover', files: File[]): Event {
 
 function setup() {
   const dropped: string[] = []
+  const targets: (EventTarget | null)[] = []
   installFileDrop(document, {
     pathForFile: (file) => `C:\\notes\\${file.name}`,
-    onFileDropped: (path) => dropped.push(path),
+    onFileDropped: (path, dropTarget) => {
+      dropped.push(path)
+      targets.push(dropTarget)
+    },
   })
-  return { dropped }
+  return { dropped, targets }
 }
 
 describe('파일 끌어다 놓기', () => {
@@ -38,5 +42,13 @@ describe('파일 끌어다 놓기', () => {
     const before = dropped.length
     document.body.dispatchEvent(dropEvent('drop', []))
     expect(dropped).toHaveLength(before)
+  })
+
+  it('파일을 놓은 자리의 요소를 함께 알린다', () => {
+    const { targets } = setup()
+    const rightPane = document.createElement('div')
+    document.body.append(rightPane)
+    rightPane.dispatchEvent(dropEvent('drop', [new File(['x'], '요약.md')]))
+    expect(targets.at(-1)).toBe(rightPane)
   })
 })

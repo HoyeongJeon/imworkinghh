@@ -1,6 +1,6 @@
 export type FileDropOptions = {
   pathForFile(file: File): string
-  onFileDropped(path: string): void
+  onFileDropped(path: string, dropTarget: EventTarget | null): void
 }
 
 // 캡처 단계에서 받는다. 에디터가 먼저 받으면 파일 내용을 글 중간에 붙여 넣는다.
@@ -13,7 +13,7 @@ export function installFileDrop(target: Document, { pathForFile, onFileDropped }
       event.preventDefault()
       if (!file) return
       event.stopPropagation()
-      onFileDropped(pathForFile(file))
+      onFileDropped(pathForFile(file), event.target)
     },
     true,
   )

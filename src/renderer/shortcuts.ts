@@ -10,6 +10,10 @@ export const APP_SHORTCUTS = {
   toggleStealthMode: 'Mod+Shift+M',
   increaseFontSize: 'Mod+=',
   decreaseFontSize: 'Mod+-',
+  addPane: 'Mod+\\',
+  closePane: 'Mod+W',
+  // macOS에서 Cmd+Tab은 앱 전환 키라서 두 OS 모두 Ctrl을 쓴다.
+  nextPane: 'Ctrl+Tab',
 } as const
 
 export type KeyPress = Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'isComposing' | 'keyCode'>
@@ -37,6 +41,10 @@ const CODE_BY_SYMBOL: Record<string, string> = {
   '\\': 'Backslash',
 }
 
+const CODE_BY_NAMED_KEY: Record<string, string> = {
+  Tab: 'Tab',
+}
+
 export function parseShortcut(combo: string): ParsedShortcut | null {
   const parts = combo.split('+').map((part) => part.trim())
   const keyName = parts.pop()
@@ -58,7 +66,7 @@ export function parseShortcut(combo: string): ParsedShortcut | null {
 function codeForKeyName(keyName: string): string | null {
   if (/^[a-z]$/i.test(keyName)) return `Key${keyName.toUpperCase()}`
   if (/^[0-9]$/.test(keyName)) return `Digit${keyName}`
-  return CODE_BY_SYMBOL[keyName] ?? null
+  return CODE_BY_SYMBOL[keyName] ?? CODE_BY_NAMED_KEY[keyName] ?? null
 }
 
 export function isUsableAppShortcut(combo: string): boolean {

@@ -56,6 +56,23 @@ describe('단축키', () => {
     expect(APP_SHORTCUTS.toggleStealthMode).toBe('Mod+Shift+M')
   })
 
+  it('칸은 Ctrl+\\로 더하고 Ctrl+W로 닫고 Ctrl+Tab으로 옮긴다', () => {
+    expect(matchesShortcut(press({ code: 'Backslash', ctrlKey: true }), APP_SHORTCUTS.addPane, 'win32')).toBe(true)
+    expect(matchesShortcut(press({ code: 'KeyW', ctrlKey: true }), APP_SHORTCUTS.closePane, 'win32')).toBe(true)
+    expect(matchesShortcut(press({ code: 'Tab', ctrlKey: true }), APP_SHORTCUTS.nextPane, 'win32')).toBe(true)
+  })
+
+  it('맥에서 칸 더하기와 닫기는 Cmd를 쓰지만 칸 이동은 앱 전환 키를 피해 Ctrl+Tab이다', () => {
+    expect(matchesShortcut(press({ code: 'Backslash', metaKey: true }), APP_SHORTCUTS.addPane, 'darwin')).toBe(true)
+    expect(matchesShortcut(press({ code: 'KeyW', metaKey: true }), APP_SHORTCUTS.closePane, 'darwin')).toBe(true)
+    expect(matchesShortcut(press({ code: 'Tab', ctrlKey: true }), APP_SHORTCUTS.nextPane, 'darwin')).toBe(true)
+    expect(matchesShortcut(press({ code: 'Tab', metaKey: true }), APP_SHORTCUTS.nextPane, 'darwin')).toBe(false)
+  })
+
+  it('Tab 키도 단축키 조합에 쓸 수 있다', () => {
+    expect(parseShortcut('Ctrl+Tab')).toEqual({ code: 'Tab', mod: false, ctrl: true, cmd: false, shift: false, alt: false })
+  })
+
   it('앱 단축키와 기본 패닉 키는 서로 겹치지 않는다', () => {
     const combos = [...Object.values(APP_SHORTCUTS), 'Mod+`', 'Mod+Shift+.']
     expect(new Set(combos).size).toBe(combos.length)
