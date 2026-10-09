@@ -1,23 +1,25 @@
 import type { ImworkingApi, OpenedFile } from '../shared/api'
 import type { FileFormat, PaneBackup } from '../shared/types'
+import type { CommandLock } from './command-lock'
 import type { DocumentState } from './document-state'
 
 export type TextSource = { getText(): string; setText(text: string): void }
 
 export type FileLocation = { path: string; directory: string; format: FileFormat; origin: 'opened' | 'saved' }
 
-export type CommandsApi = Pick<
-  ImworkingApi,
-  'openFileDialog' | 'openPath' | 'saveFile' | 'confirmDiscard' | 'clearBackup' | 'closeWindowNow'
->
+export type CommandsApi = Pick<ImworkingApi, 'openFileDialog' | 'openPath' | 'saveFile' | 'confirmDiscard'>
 
 export type DocumentCommandsDeps = {
   api: CommandsApi
+  lock: CommandLock
   editor: TextSource
   documentState: DocumentState
   savePreferences(): { defaultDirectory: string | null; defaultFormat: FileFormat }
+  // 같은 파일을 두 칸에서 따로 저장하면 서로 덮어쓰므로, 이미 다른 칸에 열려 있으면 그 칸으로 옮기고 true를 돌려준다.
+  focusIfOpenElsewhere(path: string): boolean
   onFileLocationChanged(location: FileLocation | null): void
   onDocumentReplaced(): void
+  onBackupStale(): void
 }
 
 export type DocumentCommands = {
@@ -25,37 +27,14 @@ export type DocumentCommands = {
   open(): Promise<boolean>
   save(): Promise<boolean>
   saveAs(): Promise<boolean>
-  close(): Promise<boolean>
+  confirmClose(): Promise<boolean>
   openPath(path: string): Promise<boolean>
   openRequestedFile(path: string): Promise<boolean>
-  restoreBackup(backup: PaneBackup): void
+  restore(backup: PaneBackup): Promise<boolean>
 }
 
 export function createDocumentCommands(deps: DocumentCommandsDeps): DocumentCommands {
-  const { api, editor, documentState } = deps
-  let running: Promise<boolean> | null = null
-
-  function track(command: Promise<boolean>): Promise<boolean> {
-    running = command
-    const clear = () => {
-      if (running === command) running = null
-    }
-    command.then(clear, clear)
-    return command
-  }
-
-  // 저장 창 같은 대화 상자가 떠 있는 동안 단축키를 또 누르면 창이 겹쳐 뜨므로, 진행 중인 명령이 있으면 무시한다.
-  function unlessBusy<Args extends unknown[]>(command: (...args: Args) => Promise<boolean>) {
-    return (...args: Args): Promise<boolean> => (running ? Promise.resolve(false) : track(command(...args)))
-  }
-
-  // 다른 프로그램에서 연 파일은 다시 요청할 방법이 없으므로 버리지 않고 진행 중인 명령이 끝나기를 기다린다.
-  function afterRunning<Args extends unknown[]>(command: (...args: Args) => Promise<boolean>) {
-    return async (...args: Args): Promise<boolean> => {
-      while (running) await running.catch(() => false)
-      return track(command(...args))
-    }
-  }
+  const { api, lock, editor, documentState } = deps
 
   async function saveDocument(saveAs: boolean): Promise<boolean> {
     const text = editor.getText()
@@ -64,8 +43,8 @@ export function createDocumentCommands(deps: DocumentCommandsDeps): DocumentComm
     const result = await api.saveFile({ path, text, eol, saveAs, defaultDirectory, defaultFormat })
     if (result.status !== 'saved') return false
     documentState.markSaved({ path: result.path, format: result.format }, text)
-    await api.clearBackup()
     deps.onFileLocationChanged({ path: result.path, directory: result.directory, format: result.format, origin: 'saved' })
+    deps.onBackupStale()
     return true
   }
 
@@ -83,57 +62,58 @@ export function createDocumentCommands(deps: DocumentCommandsDeps): DocumentComm
     deps.onFileLocationChanged({ path: file.path, directory: file.directory, format: file.format, origin: 'opened' })
   }
 
+  async function openSilently(path: string): Promise<boolean> {
+    if (deps.focusIfOpenElsewhere(path)) return false
+    const result = await api.openPath(path)
+    if (result.status !== 'opened') return false
+    showOpenedFile(result.file)
+    return true
+  }
+
   return {
-    newDocument: unlessBusy(async () => {
+    newDocument: lock.unlessBusy(async () => {
       if (!(await resolveUnsavedChanges())) return false
       documentState.startNew()
       editor.setText('')
-      await api.clearBackup()
       deps.onDocumentReplaced()
       deps.onFileLocationChanged(null)
+      deps.onBackupStale()
       return true
     }),
 
-    open: unlessBusy(async () => {
+    open: lock.unlessBusy(async () => {
       if (!(await resolveUnsavedChanges())) return false
       const result = await api.openFileDialog(deps.savePreferences().defaultDirectory)
-      if (result.status !== 'opened') return false
+      if (result.status !== 'opened' || deps.focusIfOpenElsewhere(result.file.path)) return false
       showOpenedFile(result.file)
-      await api.clearBackup()
+      deps.onBackupStale()
       return true
     }),
 
-    save: unlessBusy(() => saveDocument(false)),
+    save: lock.unlessBusy(() => saveDocument(false)),
 
-    saveAs: unlessBusy(() => saveDocument(true)),
+    saveAs: lock.unlessBusy(() => saveDocument(true)),
 
-    close: unlessBusy(async () => {
-      if (!(await resolveUnsavedChanges())) return false
-      await api.clearBackup()
-      api.closeWindowNow()
-      return true
-    }),
+    confirmClose: lock.unlessBusy(resolveUnsavedChanges),
 
-    openPath: unlessBusy(async (path: string) => {
-      const result = await api.openPath(path)
-      if (result.status !== 'opened') return false
-      showOpenedFile(result.file)
-      return true
-    }),
+    openPath: lock.unlessBusy(openSilently),
 
-    openRequestedFile: afterRunning(async (path: string) => {
+    openRequestedFile: lock.afterRunning(async (path: string) => {
+      if (deps.focusIfOpenElsewhere(path)) return false
       if (!(await resolveUnsavedChanges())) return false
       const result = await api.openPath(path, { reportErrors: true })
       if (result.status !== 'opened') return false
       showOpenedFile(result.file)
-      await api.clearBackup()
+      deps.onBackupStale()
       return true
     }),
 
-    restoreBackup(backup) {
+    restore: lock.unlessBusy(async (backup: PaneBackup) => {
+      if (backup.unsavedContent === null) return backup.path === null ? false : openSilently(backup.path)
       documentState.loadUnsaved(backup)
-      editor.setText(backup.unsavedContent ?? '')
+      editor.setText(backup.unsavedContent)
       deps.onDocumentReplaced()
-    },
+      return true
+    }),
   }
 }

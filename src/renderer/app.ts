@@ -3,6 +3,7 @@ import { FONT_SIZE_RANGE } from '../shared/settings'
 import type { Settings, ThemeId } from '../shared/types'
 import { backupSetOf, createAutosave, unsavedPaneCount } from './autosave'
 import { createCloseHandler } from './close-handler'
+import { createCommandLock } from './command-lock'
 import { createDebouncedTask } from './debounce'
 import { createDocumentCommands, type CommandsApi } from './document-commands'
 import { createDocumentState } from './document-state'
@@ -189,15 +190,15 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     openPath: (path, options) => api.openPath(path, options),
     saveFile: (request) => api.saveFile(request),
     confirmDiscard: () => api.confirmDiscard(),
-    closeWindowNow: () => api.closeWindowNow(),
-    clearBackup: () => api.clearBackup(),
   }
 
   const commands = createDocumentCommands({
     api: commandsApi,
+    lock: createCommandLock(),
     editor,
     documentState,
     savePreferences: () => ({ defaultDirectory: settings.lastDirectory, defaultFormat: settings.defaultFormat }),
+    focusIfOpenElsewhere: () => false,
     onFileLocationChanged: (location) => {
       if (!location) updateSettings({ openFiles: [] })
       else if (location.origin === 'saved')
@@ -206,6 +207,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
       documentStatus.runNow()
     },
     onDocumentReplaced: () => documentStatus.runNow(),
+    onBackupStale: () => void autosave.flushNow(),
   })
 
   bindShortcuts(
@@ -251,7 +253,12 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   api.onCloseRequested(
     createCloseHandler({
       isStartupFinished: () => startupFinished,
-      closeDocument: () => commands.close(),
+      closeWindow: async () => {
+        if (!(await commands.confirmClose())) return false
+        await api.clearBackup()
+        api.closeWindowNow()
+        return true
+      },
       closeWindowNow: () => api.closeWindowNow(),
       pauseAutosave: () => autosave.stop(),
       resumeAutosave: () => autosave.start(),
@@ -270,7 +277,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   const unsavedCount = backup ? unsavedPaneCount(backup) : 0
   const restored = backup !== null && unsavedCount > 0 && (await api.askRestoreBackup(backup.savedAt, unsavedCount))
   const restoredPane = backup?.panes.find((pane) => pane.unsavedContent !== null)
-  if (restored && restoredPane) commands.restoreBackup(restoredPane)
+  if (restored && restoredPane) await commands.restore(restoredPane)
   else if (backup) await api.clearBackup()
 
   // main은 대기 중인 파일을 넘겨준 뒤부터 요청을 바로 보내므로, 그보다 먼저 받을 준비를 해야 요청이 사라지지 않는다.

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createCommandLock, type CommandLock } from '../../src/renderer/command-lock'
 import {
   createDocumentCommands,
   type CommandsApi,
@@ -16,12 +17,14 @@ const openedFile: OpenedFile = {
   format: 'md',
 }
 
+const openedResult = { status: 'opened' as const, file: openedFile }
+
 function createFakeApi(overrides: Partial<CommandsApi> = {}) {
   const calls: string[] = []
   const api: CommandsApi = {
     openFileDialog: async () => {
       calls.push('openFileDialog')
-      return { status: 'opened', file: openedFile }
+      return openedResult
     },
     openPath: async (path) => {
       calls.push(`openPath ${path}`)
@@ -35,31 +38,42 @@ function createFakeApi(overrides: Partial<CommandsApi> = {}) {
       calls.push('confirmDiscard')
       return 'cancel'
     },
-    clearBackup: async () => {
-      calls.push('clearBackup')
-    },
-    closeWindowNow: () => {
-      calls.push('closeWindowNow')
-    },
     ...overrides,
   }
   return { api, calls }
 }
 
-function setup(api: CommandsApi) {
+function setup(api: CommandsApi, { lock = createCommandLock(), openElsewhere = [] as string[] }: { lock?: CommandLock; openElsewhere?: string[] } = {}) {
   let text = ''
+  let backupStaleCount = 0
+  const focusedElsewhere: string[] = []
   const editor = { getText: () => text, setText: (next: string) => (text = next) }
   const documentState = createDocumentState('lf')
   const locations: (FileLocation | null)[] = []
   const commands = createDocumentCommands({
     api,
+    lock,
     editor,
     documentState,
     savePreferences: () => ({ defaultDirectory: '/notes', defaultFormat: 'md' }),
+    focusIfOpenElsewhere: (path) => {
+      if (!openElsewhere.includes(path)) return false
+      focusedElsewhere.push(path)
+      return true
+    },
     onFileLocationChanged: (location) => locations.push(location),
     onDocumentReplaced: () => undefined,
+    onBackupStale: () => backupStaleCount++,
   })
-  return { commands, documentState, locations, type: (next: string) => (text = next), text: () => text }
+  return {
+    commands,
+    documentState,
+    locations,
+    focusedElsewhere,
+    backupStaleCount: () => backupStaleCount,
+    type: (next: string) => (text = next),
+    text: () => text,
+  }
 }
 
 describe('새 문서', () => {
@@ -112,22 +126,23 @@ describe('새 문서', () => {
     expect(text()).toBe('지키는 글')
   })
 
-  it('새 문서를 열면 열린 파일이 없다고 알린다', async () => {
+  it('새 문서를 열면 열린 파일이 없다고 알리고 백업을 고쳐 쓰라고 알린다', async () => {
     const { api } = createFakeApi()
-    const { commands, locations } = setup(api)
+    const { commands, locations, backupStaleCount } = setup(api)
     await commands.newDocument()
     expect(locations.at(-1)).toBeNull()
+    expect(backupStaleCount()).toBe(1)
   })
 })
 
 describe('저장', () => {
-  it('저장하면 고른 경로와 형식을 알리고 백업을 지운다', async () => {
-    const { api, calls } = createFakeApi()
-    const { commands, type, locations } = setup(api)
+  it('저장하면 고른 경로와 형식을 알리고 백업을 고쳐 쓰라고 알린다', async () => {
+    const { api } = createFakeApi()
+    const { commands, type, locations, backupStaleCount } = setup(api)
     type('새 글')
     expect(await commands.save()).toBe(true)
     expect(locations.at(-1)).toEqual({ path: '/notes/new.md', directory: '/notes', format: 'md', origin: 'saved' })
-    expect(calls).toContain('clearBackup')
+    expect(backupStaleCount()).toBe(1)
   })
 
   it('저장하고 나면 변경 없음 상태가 된다', async () => {
@@ -138,12 +153,13 @@ describe('저장', () => {
     expect(documentState.isDirty('새 글')).toBe(false)
   })
 
-  it('저장에 실패하면 변경 상태를 그대로 둔다', async () => {
+  it('저장에 실패하면 변경 상태를 그대로 두고 백업도 그대로 둔다', async () => {
     const { api } = createFakeApi({ saveFile: async () => ({ status: 'failed', message: '권한' }) })
-    const { commands, type, documentState } = setup(api)
+    const { commands, type, documentState, backupStaleCount } = setup(api)
     type('새 글')
     expect(await commands.save()).toBe(false)
     expect(documentState.isDirty('새 글')).toBe(true)
+    expect(backupStaleCount()).toBe(0)
   })
 
   it('경로가 있는 문서를 저장하면 그 경로로 저장을 요청한다', async () => {
@@ -164,14 +180,15 @@ describe('저장', () => {
   })
 })
 
-describe('열기와 복구', () => {
-  it('파일을 열면 에디터에 내용을 넣고 변경 없음 상태가 된다', async () => {
+describe('열기', () => {
+  it('파일을 열면 에디터에 내용을 넣고 변경 없음 상태가 되며 백업을 고쳐 쓰라고 알린다', async () => {
     const { api } = createFakeApi()
-    const { commands, text, documentState, locations } = setup(api)
+    const { commands, text, documentState, locations, backupStaleCount } = setup(api)
     expect(await commands.open()).toBe(true)
     expect(text()).toBe('# 열린 글')
     expect(documentState.isDirty('# 열린 글')).toBe(false)
     expect(locations.at(-1)).toMatchObject({ path: '/notes/a.md', origin: 'opened' })
+    expect(backupStaleCount()).toBe(1)
   })
 
   it('마지막 파일 다시 열기에 실패하면 새 문서 그대로 둔다', async () => {
@@ -180,36 +197,65 @@ describe('열기와 복구', () => {
     expect(await commands.openPath('/notes/gone.md')).toBe(false)
     expect(text()).toBe('')
   })
+})
 
-  it('백업에서 복구하면 내용을 넣고 변경 있음 상태가 된다', () => {
+describe('복구', () => {
+  it('저장 안 한 내용이 있는 칸을 복구하면 내용을 넣고 변경 있음 상태가 된다', async () => {
     const { api } = createFakeApi()
     const { commands, text, documentState } = setup(api)
-    commands.restoreBackup({ path: null, eol: 'lf', unsavedContent: '복구한 글' })
+    expect(await commands.restore({ path: '/notes/a.md', eol: 'lf', unsavedContent: '복구한 글' })).toBe(true)
     expect(text()).toBe('복구한 글')
     expect(documentState.isDirty('복구한 글')).toBe(true)
+    expect(documentState.info().path).toBe('/notes/a.md')
+  })
+
+  it('변경 없던 칸을 복구하면 그 파일을 다시 연다', async () => {
+    const { api, calls } = createFakeApi({
+      openPath: async (path) => {
+        calls.push(`openPath ${path}`)
+        return openedResult
+      },
+    })
+    const { commands, text } = setup(api)
+    expect(await commands.restore({ path: '/notes/a.md', eol: 'lf', unsavedContent: null })).toBe(true)
+    expect(calls).toContain('openPath /notes/a.md')
+    expect(text()).toBe('# 열린 글')
+  })
+
+  it('변경 없던 칸의 파일이 없어졌으면 빈 새 문서로 둔다', async () => {
+    const { api } = createFakeApi()
+    const { commands, text, documentState } = setup(api)
+    expect(await commands.restore({ path: '/notes/gone.md', eol: 'lf', unsavedContent: null })).toBe(false)
+    expect(text()).toBe('')
+    expect(documentState.info().path).toBeNull()
   })
 })
 
-describe('닫기', () => {
-  it('변경 없이 닫으면 백업을 지우고 창을 닫는다', async () => {
+describe('닫기 확인', () => {
+  it('변경이 없으면 묻지 않고 닫아도 된다고 답한다', async () => {
     const { api, calls } = createFakeApi()
     const { commands } = setup(api)
-    expect(await commands.close()).toBe(true)
-    expect(calls).toEqual(['clearBackup', 'closeWindowNow'])
+    expect(await commands.confirmClose()).toBe(true)
+    expect(calls).toEqual([])
   })
 
-  it('닫을 때 저장을 골랐는데 저장 창을 취소하면 닫지 않는다', async () => {
-    const { api, calls } = createFakeApi({ confirmDiscard: async () => 'save', saveFile: async () => ({ status: 'canceled' }) })
+  it('저장 안 함을 고르면 저장하지 않고 닫아도 된다고 답한다', async () => {
+    const { api, calls } = createFakeApi({ confirmDiscard: async () => 'discard' })
+    const { commands, type } = setup(api)
+    type('버릴 글')
+    expect(await commands.confirmClose()).toBe(true)
+    expect(calls.some((call) => call.startsWith('saveFile'))).toBe(false)
+  })
+
+  it('저장을 골랐는데 저장 창을 취소하면 닫으면 안 된다고 답한다', async () => {
+    const { api } = createFakeApi({ confirmDiscard: async () => 'save', saveFile: async () => ({ status: 'canceled' }) })
     const { commands, type } = setup(api)
     type('잃으면 안 되는 글')
-    expect(await commands.close()).toBe(false)
-    expect(calls).not.toContain('closeWindowNow')
+    expect(await commands.confirmClose()).toBe(false)
   })
 })
 
 describe('다른 프로그램에서 열기', () => {
-  const openedResult = { status: 'opened' as const, file: openedFile }
-
   it('저장 안 한 변경이 있으면 열기 전에 저장할지 묻는다', async () => {
     const { api, calls } = createFakeApi({ openPath: async () => openedResult })
     const { commands, type } = setup(api)
@@ -240,13 +286,40 @@ describe('다른 프로그램에서 열기', () => {
     expect(text()).toBe('')
   })
 
-  it('열면 에디터에 내용을 넣고 백업을 지운다', async () => {
-    const { api, calls } = createFakeApi({ openPath: async () => openedResult })
-    const { commands, text, locations } = setup(api)
+  it('열면 에디터에 내용을 넣고 백업을 고쳐 쓰라고 알린다', async () => {
+    const { api } = createFakeApi({ openPath: async () => openedResult })
+    const { commands, text, locations, backupStaleCount } = setup(api)
     expect(await commands.openRequestedFile('/notes/a.md')).toBe(true)
     expect(text()).toBe('# 열린 글')
-    expect(calls).toContain('clearBackup')
+    expect(backupStaleCount()).toBe(1)
     expect(locations.at(-1)).toMatchObject({ path: '/notes/a.md', origin: 'opened' })
+  })
+})
+
+describe('다른 칸에 열린 파일', () => {
+  it('다른 칸에 열린 파일을 열라는 요청이 오면 묻지도 열지도 않고 그 칸으로 옮긴다', async () => {
+    const { api, calls } = createFakeApi({ openPath: async () => openedResult })
+    const { commands, type, text, focusedElsewhere } = setup(api, { openElsewhere: ['/notes/a.md'] })
+    type('쓰던 글')
+    expect(await commands.openRequestedFile('/notes/a.md')).toBe(false)
+    expect(calls).not.toContain('confirmDiscard')
+    expect(focusedElsewhere).toEqual(['/notes/a.md'])
+    expect(text()).toBe('쓰던 글')
+  })
+
+  it('열기 창에서 다른 칸에 열린 파일을 고르면 열지 않고 그 칸으로 옮긴다', async () => {
+    const { api } = createFakeApi()
+    const { commands, text, focusedElsewhere } = setup(api, { openElsewhere: ['/notes/a.md'] })
+    expect(await commands.open()).toBe(false)
+    expect(focusedElsewhere).toEqual(['/notes/a.md'])
+    expect(text()).toBe('')
+  })
+
+  it('다시 열 파일이 다른 칸에 열려 있으면 열지 않는다', async () => {
+    const { api, calls } = createFakeApi()
+    const { commands } = setup(api, { openElsewhere: ['/notes/a.md'] })
+    expect(await commands.openPath('/notes/a.md')).toBe(false)
+    expect(calls).not.toContain('openPath /notes/a.md')
   })
 })
 
@@ -272,13 +345,26 @@ describe('명령 겹침', () => {
     expect(saveFile).toHaveBeenCalledTimes(1)
   })
 
+  it('같은 잠금을 쓰는 다른 칸의 명령도 저장 창이 떠 있는 동안 무시한다', async () => {
+    const pending = pendingSave()
+    const lock = createCommandLock()
+    const left = setup(createFakeApi({ saveFile: pending.saveFile }).api, { lock })
+    const rightApi = createFakeApi()
+    const right = setup(rightApi.api, { lock })
+    const saving = left.commands.save()
+    expect(await right.commands.open()).toBe(false)
+    expect(rightApi.calls).not.toContain('openFileDialog')
+    pending.finish()
+    expect(await saving).toBe(true)
+  })
+
   it('다른 프로그램에서 연 파일은 진행 중인 명령이 끝난 뒤에 연다', async () => {
     const pending = pendingSave()
     const { api, calls } = createFakeApi({
       saveFile: pending.saveFile,
       openPath: async (path) => {
         calls.push(`openPath ${path}`)
-        return { status: 'opened', file: openedFile }
+        return openedResult
       },
     })
     const { commands, text } = setup(api)
