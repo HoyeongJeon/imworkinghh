@@ -10,6 +10,7 @@
 - 위쪽: 가짜 Claude Code 세션이 계속 흘러간다 (연출용, 실제로 아무것도 실행하지 않음).
 - 아래쪽: 사용자가 실제로 글을 쓰는 에디터.
 - 두 영역의 경계는 마우스로 드래그해 크기를 조절한다.
+- 회사 밖에서는 은신 모드를 꺼서 평범한 마크다운 글쓰기 앱으로 쓴다 (3.1).
 
 ### 성공 기준
 
@@ -53,9 +54,19 @@
 - 창 테두리를 직접 그린다.
   - Windows 계열 테마: Windows Terminal 스타일 탭 제목줄 (`⚡ Windows PowerShell ×  +  ∨`)과 최소화/최대화/닫기 버튼
   - macOS 계열 테마: 기본 신호등 버튼을 유지하고 가운데에 `user — claude — 80×24` 스타일 제목
-- OS 창 제목(작업 표시줄, Alt+Tab)은 테마 이름으로 위장한다 (예: `Windows PowerShell`). 파일명은 상태바에만 표시한다.
+- 은신 모드에서는 OS 창 제목(작업 표시줄, Alt+Tab)을 테마 이름으로 위장한다 (예: `Windows PowerShell`). 파일명은 상태바에만 표시한다.
 - 분할 비율은 종료 시 저장했다가 다음 실행 때 복원한다.
 - 드래그할 때 위아래 영역은 각각 최소 80px을 유지한다. 패닉 키로 접을 때만 에디터 영역이 0이 된다.
+
+### 3.1 은신 모드
+
+위의 위장 화면이 은신 모드다. 기본은 켬이고, 끄면 평범한 글쓰기 앱이 된다.
+
+- 끄면 가짜 세션 영역과 분할 막대를 숨기고 에디터가 화면을 채운다. 가짜 세션은 멈추고, 다시 켜면 이어서 흐른다. 사용자가 멈춰 둔 세션은 다시 켜도 멈춘 채로 둔다.
+- 끈 상태의 창 제목(OS 창 제목과 그려 둔 제목줄)은 `notes.md ● - md-writer` 형식이다. 새 문서는 `untitled`, `●`는 저장 안 한 변경이 있을 때만 붙는다.
+- 끈 상태에서는 패닉 키와 가짜 세션 일시정지 단축키가 동작하지 않는다. 패닉으로 접혀 있던 중에 끄면 먼저 원래 비율로 되돌린다.
+- 테마 색, 상태바, 저장 동작은 켜고 끄는 것과 상관없이 같다.
+- 실행 파일과 프로세스 이름은 그대로 `imworkinghh`다.
 
 ## 4. 단축키
 
@@ -70,6 +81,7 @@ macOS에서는 `Ctrl`이 `Cmd`로 바뀐다.
 | `Ctrl+Shift+H` | 문법 색칠 켜기/끄기 |
 | `Ctrl+Shift+P` | 가짜 세션 일시정지/재개 |
 | `Ctrl+Shift+T` | 테마 순환 |
+| `Ctrl+Shift+M` | 은신 모드 켜기/끄기 |
 | `Ctrl+휠`, `Ctrl+=`, `Ctrl+-` | 글꼴 크기 |
 
 ## 5. 가짜 Claude Code 세션
@@ -202,7 +214,7 @@ DOM에 의존하지 않는 순수 모듈이다. 시드를 받는 난수 생성�
 ## 9. 설정 (`shared/settings.ts`, `main/settings-store.ts`)
 
 - 위치: `{userData}/settings.json` (Windows `%APPDATA%\imworkinghh`, macOS `~/Library/Application Support/imworkinghh`)
-- 항목: `theme`, `syntaxHighlight`, `panicEnabled`, `panicKey`, `typingLink`, `logSpeed`, `fontSize`, `splitRatio`, `windowBounds`, `lastDirectory`, `lastFile`, `defaultFormat`
+- 항목: `stealthMode`, `theme`, `syntaxHighlight`, `panicEnabled`, `panicKey`, `typingLink`, `logSpeed`, `fontSize`, `splitRatio`, `windowBounds`, `lastDirectory`, `lastFile`, `defaultFormat`
 - 불러올 때 기본값과 병합한다. 알 수 없는 키는 버리고, 타입이 틀린 값은 기본값으로 바꾼다.
 - 파일이 깨져 있으면 `settings.bad.json`으로 옮기고 기본값으로 시작한다.
 - 읽기와 쓰기는 요청한 순서대로 처리한다. 겹친 저장에서 오래된 설정이 새 설정을 덮지 않게 한다.
@@ -258,6 +270,7 @@ src/
    ├─ shortcuts.ts            단축키 해석과 등록
    ├─ statusbar.ts            상태바 내용과 표시
    ├─ titlebar.ts             가짜 터미널 제목줄
+   ├─ stealth.ts              은신 모드 창 제목, 가짜 세션 숨기기/다시 보이기
    ├─ settings-dialog.ts      설정 창
    ├─ styles.css
    └─ fake/

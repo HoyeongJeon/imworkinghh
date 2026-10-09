@@ -1,6 +1,6 @@
 # imworkinghh
 
-터미널에서 Claude Code로 작업하는 것처럼 보이는 마크다운 글쓰기 앱. 위쪽에는 가짜 Claude Code 세션이 흐르고, 아래쪽에서 실제로 글을 쓴다. Windows와 macOS를 지원한다.
+터미널에서 Claude Code로 작업하는 것처럼 보이는 마크다운 글쓰기 앱. 위쪽에는 가짜 Claude Code 세션이 흐르고, 아래쪽에서 실제로 글을 쓴다. 은신 모드를 끄면 평범한 마크다운 글쓰기 앱(`md-writer`)으로 보인다. Windows와 macOS를 지원한다.
 
 ## 스택
 
