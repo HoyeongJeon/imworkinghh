@@ -1,7 +1,7 @@
 # 나란히 쓰기 설계 문서
 
 - 작성일: 2026-10-09
-- 상태: 검토 중
+- 상태: 확정
 - 바탕 문서: [`2026-10-08-imworkinghh-design.md`](2026-10-08-imworkinghh-design.md). 이 문서에 없는 내용은 바탕 문서를 따른다.
 
 ## 1. 목적
@@ -9,7 +9,7 @@
 글 여러 개를 양옆에 띄워 놓고 함께 쓴다. 예: 초안과 요약본을 동시에 고치기.
 
 - 칸마다 따로 편집하고 따로 저장한다. 한쪽이 읽기 전용인 참고 칸이 아니다.
-- 지금은 최대 2칸이다. 나중에 3~5칸으로 늘릴 수 있어야 하므로, 코드는 칸 개수에 묶이지 않게 짓는다. 늘릴 때는 `MAX_PANES` 상수만 바꾼다.
+- 지금은 최대 2칸이다. 나중에 3~5칸으로 늘릴 수 있어야 하므로, 코드는 칸 개수에 묶이지 않게 짓는다. 늘릴 때는 `src/shared/panes.ts`의 `MAX_PANES` 상수만 바꾼다.
 
 ### 성공 기준
 
@@ -124,10 +124,16 @@ macOS에서는 `Ctrl`이 `Cmd`로 바뀐다. 단, 칸 이동은 macOS에서도 `
 | `workspace-commands.ts` | 여러 칸에 걸친 흐름: 창 닫기, 칸 닫기, 외부 파일 열기, 복구, 다시 열기 | `PaneSet`과 칸의 작은 인터페이스 |
 | `pane-widths.ts` | 칸 너비 비율 계산 | 없음 (순수 함수) |
 | `pane-dividers.ts` | 칸 사이 세로 막대 그리기와 끌기 | DOM, `pane-widths` |
+| `command-lock.ts` | 명령 겹침 잠금. 모든 칸이 하나를 함께 쓴다 | 없음 |
+
+`MAX_PANES`와 경로 비교(`isSamePath`)는 설정 교정(`shared/settings.ts`)에서도 쓰므로 `src/shared/panes.ts`에 둔다.
 
 ```ts
 // pane-set.ts
-export const MAX_PANES = 2
+export type PaneChange =
+  | { kind: 'added'; index: number }
+  | { kind: 'removed'; index: number }
+  | { kind: 'focused' }
 
 export type PaneSet<P> = {
   all(): readonly P[]
@@ -142,7 +148,7 @@ export function createPaneSet<P>(options: {
   maxPanes: number
   createPane(): P
   destroyPane(pane: P): void
-  onChanged(): void // 칸 추가·삭제·지금 칸 변경
+  onChanged(change: PaneChange): void // 칸 추가·삭제·지금 칸 변경. 너비 계산에 쓰도록 위치를 알린다
 }): PaneSet<P>
 ```
 
@@ -163,6 +169,8 @@ export type DocumentPane = {
 }
 ```
 
+에디터, 문서 상태, 문서 명령, 지연 실행을 만드는 함수는 `parts`로 받는다. 칸을 만들 때 글꼴 크기·문법 색칠·줄번호 표시를 함께 받아, 은신 모드에서 새로 더한 칸에도 줄번호가 보이지 않게 한다.
+
 ```ts
 // workspace-commands.ts — 칸을 아래 인터페이스로만 다룬다
 export type WorkspacePane = {
@@ -176,19 +184,22 @@ export type WorkspaceCommands = {
   addPane(): boolean
   closeFocusedPane(): Promise<boolean>
   closeWindow(): Promise<boolean>
+  focusPaneWithFile(path: string, except: WorkspacePane): boolean
   openRequestedFile(path: string, target?: WorkspacePane): Promise<boolean>
   restore(backup: BackupSet): Promise<void>
-  reopen(paths: string[]): Promise<void>
+  reopen(paths: readonly string[]): Promise<void>
 }
 ```
 
 ```ts
 // pane-widths.ts — 너비는 합이 1인 비율 목록
+export const MIN_PANE_WIDTH_PX = 240
 export function equalWidths(count: number): number[]
-export function widthsAfterAdd(widths: number[], afterIndex: number): number[]
-export function widthsAfterRemove(widths: number[], index: number): number[]
+// 반으로 나눈 너비가 minRatio보다 좁으면 모든 칸을 같은 너비로 나눈다 (3칸 이상에서 좁은 칸을 나눌 때)
+export function widthsAfterAdd(widths: readonly number[], afterIndex: number, minRatio: number): number[]
+export function widthsAfterRemove(widths: readonly number[], index: number): number[]
 export function widthsAfterDrag(
-  widths: number[], dividerIndex: number, pointerRatio: number, minRatio: number,
+  widths: readonly number[], dividerIndex: number, pointerRatio: number, minRatio: number,
 ): number[]
 export function canAddPane(count: number, availablePx: number, minPanePx: number): boolean
 ```
@@ -201,15 +212,17 @@ export function canAddPane(count: number, availablePx: number, minPanePx: number
 | `shared/settings.ts` | 새 항목 교정, `lastFile` 옮기기 |
 | `main/backup-store.ts` | `BackupSet` 읽기/쓰기, 기존 형식 읽기 |
 | `main/dialog-options.ts` | 복구 질문에 글 개수 표시 |
-| `renderer/document-commands.ts` | `close()` → `confirmClose()` (창을 닫지 않고 이 칸을 닫아도 되는지만 확인). 백업을 직접 지우지 않고 `onBackupStale()`로 알린다. `restoreBackup(backup)` → `restore(paneBackup)`. 명령이 진행 중인지 나타내는 잠금을 직접 갖지 않고 인자로 받아, 모든 칸이 같은 잠금을 쓴다 |
+| `renderer/document-commands.ts` | `close()` → `confirmClose()` (창을 닫지 않고 이 칸을 닫아도 되는지만 확인). 백업을 직접 지우지 않고 `onBackupStale()`로 알린다. `restoreBackup(backup)` → `restore(paneBackup)`. 명령이 진행 중인지 나타내는 잠금을 직접 갖지 않고 인자로 받아, 모든 칸이 같은 잠금을 쓴다. 다른 칸에 이미 열린 파일인지 `focusIfOpenElsewhere(path)`로 묻고, 열려 있으면 열지 않는다. |
 | `renderer/autosave.ts` | 스냅샷이 `BackupSet \| null`. `null`이면 백업을 지운다. `flushNow()` 추가 |
 | `renderer/file-drop.ts` | 놓은 자리의 요소를 함께 알린다 |
 | `renderer/shortcuts.ts` | `Tab`, `\` 키 이름, 칸 단축키 |
 | `renderer/close-handler.ts` | 문서 하나 닫기 대신 `closeWindow()` 사용 |
 | `renderer/app.ts` | 에디터·문서 조립을 `document-pane`으로 옮기고, 위 모듈을 연결 |
 | `renderer/styles.css` | `#editor` 안에 칸들을 가로로 두는 격자, 세로 막대 |
+| `renderer/editor.ts` | 처음 보기 설정(글꼴 크기, 줄번호 표시)을 받는다. `destroy()` 추가 |
+| `shared/api.ts`, `main/dialogs.ts`, `main/ipc.ts`, `preload/index.ts` | 복구 질문에 저장 안 한 글 개수를 넘긴다 |
 
-main의 파일 열기·저장(`file-service`, `documents`)과 IPC는 바뀌지 않는다.
+main의 파일 열기·저장(`file-service`, `documents`)은 바뀌지 않는다. IPC는 복구 질문에 글 개수를 더하는 것만 바뀐다.
 
 ## 7. 오류와 경계
 

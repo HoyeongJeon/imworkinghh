@@ -83,6 +83,9 @@ macOS에서는 `Ctrl`이 `Cmd`로 바뀐다.
 | `Ctrl+Shift+P` | 가짜 세션 일시정지/재개 |
 | `Ctrl+Shift+T` | 테마 순환 |
 | `Ctrl+Shift+M` | 은신 모드 켜기/끄기 |
+| `Ctrl+\` | 지금 칸 오른쪽에 새 칸 (나란히 쓰기) |
+| `Ctrl+W` | 지금 칸 닫기 |
+| `Ctrl+Tab` | 다음 칸으로 (macOS도 `Ctrl+Tab`) |
 | `Ctrl+휠`, `Ctrl+=`, `Ctrl+-` | 글꼴 크기 |
 
 ## 5. 가짜 Claude Code 세션
@@ -184,15 +187,15 @@ DOM에 의존하지 않는 순수 모듈이다. 시드를 받는 난수 생성�
 
 - 마지막으로 저장(또는 연) 내용과 현재 내용을 비교해서 판단한다. 고쳤다가 원래대로 되돌리면 변경 없음이 된다.
 - 변경이 있는 상태에서 창 닫기, 새 문서, 열기를 하면 `저장` / `저장 안 함` / `취소`를 묻는다.
-- 새 문서, 열기, 저장, 닫기가 진행 중이면(대화상자가 떠 있는 동안 등) 다시 들어온 명령은 무시한다. 다른 프로그램에서 연 파일만은 버리지 않고 진행 중인 명령이 끝난 뒤 연다.
+- 새 문서, 열기, 저장, 닫기가 진행 중이면(대화상자가 떠 있는 동안 등) 다시 들어온 명령은 무시한다. 나란히 쓰기의 모든 칸이 이 규칙을 함께 쓴다. 다른 프로그램에서 연 파일만은 버리지 않고 진행 중인 명령이 끝난 뒤 연다.
 
 ### 8.5 자동 백업과 복구
 
-- 변경이 있고 마지막 백업 이후 내용이 바뀌었으면 30초마다 `{userData}/backup/current.json`에 `{ path, content, eol, savedAt }`를 쓴다.
+- 마지막 백업 이후 내용이 바뀌었으면 30초마다 `{userData}/backup/current.json`에 모든 칸의 상태를 `{ savedAt, panes: [{ path, eol, unsavedContent }] }`로 쓴다. 저장 안 한 칸이 하나도 없으면 백업을 지운다 (나란히 쓰기 설계 4.2).
 - 정상 저장하거나 변경 없이 종료하면 백업을 지운다.
 - 백업 쓰기, 읽기, 지우기는 요청한 순서대로 처리한다. 저장 직전에 시작된 백업이 저장 뒤의 지우기보다 늦게 끝나 백업이 남는 일을 막는다.
 - 시작할 때 백업이 있으면 복구할지 묻는다.
-- 마지막으로 연 파일은 다음 실행 때 다시 연다 (파일이 없어졌으면 조용히 새 문서로 시작).
+- 마지막에 열려 있던 파일들은 다음 실행 때 칸 순서대로 다시 연다 (없어진 파일은 조용히 건너뛴다).
 
 ### 8.6 오류 처리
 
@@ -218,11 +221,11 @@ DOM에 의존하지 않는 순수 모듈이다. 시드를 받는 난수 생성�
 ## 9. 설정 (`shared/settings.ts`, `main/settings-store.ts`)
 
 - 위치: `{userData}/settings.json` (Windows `%APPDATA%\imworkinghh`, macOS `~/Library/Application Support/imworkinghh`)
-- 항목: `stealthMode`, `theme`, `syntaxHighlight`, `panicEnabled`, `panicKey`, `typingLink`, `logSpeed`, `fontSize`, `splitRatio`, `windowBounds`, `lastDirectory`, `lastFile`, `defaultFormat`
+- 항목: `stealthMode`, `theme`, `syntaxHighlight`, `panicEnabled`, `panicKey`, `typingLink`, `logSpeed`, `fontSize`, `splitRatio`, `windowBounds`, `lastDirectory`, `openFiles`, `paneWidths`, `defaultFormat`
 - 불러올 때 기본값과 병합한다. 알 수 없는 키는 버리고, 타입이 틀린 값은 기본값으로 바꾼다.
 - 파일이 깨져 있으면 `settings.bad.json`으로 옮기고 기본값으로 시작한다.
 - 읽기와 쓰기는 요청한 순서대로 처리한다. 겹친 저장에서 오래된 설정이 새 설정을 덮지 않게 한다.
-- 설정 창은 바꾼 항목만 알린다. 창이 열린 동안 다른 곳에서 바뀐 값(글꼴 크기, 마지막 파일)을 되돌리지 않는다.
+- 설정 창은 바꾼 항목만 알린다. 창이 열린 동안 다른 곳에서 바뀐 값(글꼴 크기, 열린 파일 목록)을 되돌리지 않는다.
 - 저장된 창 위치는 제목줄이 어느 화면 안에 있을 때만 쓴다.
 
 ## 10. 모듈 구조
@@ -232,8 +235,9 @@ DOM에 의존하지 않는 순수 모듈이다. 시드를 받는 난수 생성�
 ```
 src/
 ├─ shared/                    main, preload, renderer가 같이 쓰는 순수 코드
-│  ├─ types.ts                Settings, ThemeId, Eol, Backup 등 기본 타입
+│  ├─ types.ts                Settings, ThemeId, Eol, PaneBackup, BackupSet 등 기본 타입
 │  ├─ settings.ts             설정 기본값과 교정
+│  ├─ panes.ts                최대 칸 수, 경로 비교
 │  ├─ eol.ts                  줄바꿈 감지/변환, OS 기본 줄바꿈
 │  ├─ api.ts                  renderer가 쓰는 API 타입 (ImworkingApi)
 │  └─ ipc-channels.ts         IPC 채널 이름
@@ -265,7 +269,13 @@ src/
    ├─ editor.ts               CodeMirror 에디터
    ├─ visual-lines.ts         화면 줄 번호 계산 (높이 ÷ 줄 높이)
    ├─ document-state.ts       현재 문서 경로/줄바꿈/인코딩, 변경 여부, 백업 스냅샷
-   ├─ document-commands.ts    새 문서/열기/저장/닫기 흐름, 명령 겹침 막기
+   ├─ document-commands.ts    칸 하나의 새 문서/열기/저장/닫기 확인 흐름
+   ├─ command-lock.ts         명령 겹침 막기 (모든 칸이 함께 씀)
+   ├─ document-pane.ts        칸 하나: 에디터 + 문서 상태 + 문서 명령
+   ├─ pane-set.ts             칸 목록과 지금 칸
+   ├─ workspace-commands.ts   여러 칸 흐름: 창 닫기, 칸 닫기, 복구, 다시 열기
+   ├─ pane-widths.ts          칸 너비 비율 계산
+   ├─ pane-dividers.ts        칸 배치와 칸 사이 세로 막대 (DOM)
    ├─ close-handler.ts        창 닫기 요청 처리 (시작 중이면 바로 닫기)
    ├─ file-drop.ts            파일을 끌어다 놓으면 열기
    ├─ debounce.ts             잇따른 요청을 잠시 미뤄 한 번만 실행
