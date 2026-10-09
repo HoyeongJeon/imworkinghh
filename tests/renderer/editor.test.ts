@@ -79,6 +79,21 @@ describe('글쓰기 에디터', () => {
     expect(numbers).toEqual(['1', '2'])
   })
 
+  it('줄 번호를 숨기면 줄 번호 칸이 사라지고 다시 보이면 나타난다', () => {
+    const { editor, view } = setup()
+    editor.setLineNumbersVisible(false)
+    expect(view().dom.querySelector('.cm-visual-line-numbers')).toBeNull()
+    editor.setLineNumbersVisible(true)
+    expect(view().dom.querySelector('.cm-visual-line-numbers')).not.toBeNull()
+  })
+
+  it('글을 바꿔도 줄 번호 숨김 설정은 유지된다', () => {
+    const { editor, view } = setup()
+    editor.setLineNumbersVisible(false)
+    editor.setText('다른 글')
+    expect(view().dom.querySelector('.cm-visual-line-numbers')).toBeNull()
+  })
+
   it('문법 색칠을 끄면 마크다운으로 해석하지 않고 다시 켜면 해석한다', () => {
     const { editor, view } = setup()
     expect(view().state.facet(language)).not.toBeNull()

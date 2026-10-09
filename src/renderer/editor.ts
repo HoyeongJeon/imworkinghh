@@ -13,6 +13,7 @@ export type Editor = {
   getText(): string
   setText(text: string): void
   setSyntaxHighlight(enabled: boolean): void
+  setLineNumbersVisible(visible: boolean): void
   setFontSize(px: number): void
   focus(): void
 }
@@ -107,6 +108,8 @@ function cursorPosition(view: EditorView): CursorPosition {
 export function createEditor(options: EditorOptions): Editor {
   const highlightCompartment = new Compartment()
   const fontSizeCompartment = new Compartment()
+  const lineNumbersCompartment = new Compartment()
+  let lineNumbersVisible = true
   let syntaxHighlightEnabled = options.syntaxHighlight
   let fontSizePx = DEFAULT_FONT_SIZE_PX
 
@@ -126,7 +129,7 @@ export function createEditor(options: EditorOptions): Editor {
     EditorState.create({
       doc: text,
       extensions: [
-        visualLineNumbers,
+        lineNumbersCompartment.of(lineNumbersVisible ? visualLineNumbers : []),
         history(),
         drawSelection(),
         highlightActiveLine(),
@@ -150,6 +153,10 @@ export function createEditor(options: EditorOptions): Editor {
     setSyntaxHighlight(enabled) {
       syntaxHighlightEnabled = enabled
       view.dispatch({ effects: highlightCompartment.reconfigure(highlightExtensions(enabled)) })
+    },
+    setLineNumbersVisible(visible) {
+      lineNumbersVisible = visible
+      view.dispatch({ effects: lineNumbersCompartment.reconfigure(visible ? visualLineNumbers : []) })
     },
     setFontSize(px) {
       fontSizePx = px

@@ -123,6 +123,8 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
 
   function applyStealthMode(): void {
     elementById('workspace').classList.toggle('session-hidden', !settings.stealthMode)
+    // 터미널에는 줄 번호가 없으므로 은신 모드에서는 숨긴다.
+    editor.setLineNumbersVisible(!settings.stealthMode)
     if (settings.stealthMode) {
       sessionHider.show()
     } else {
