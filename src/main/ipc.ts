@@ -1,7 +1,7 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import type { SaveRequest } from '../shared/api'
 import { IpcChannel } from '../shared/ipc-channels'
-import type { Backup, Settings } from '../shared/types'
+import type { BackupSet, Settings } from '../shared/types'
 import type { BackupStore } from './backup-store'
 import type { AppDialogs } from './dialogs'
 import type { FileService } from './file-service'
@@ -32,9 +32,11 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle(IpcChannel.takeRequestedFile, () => deps.openRequests.takePending())
   ipcMain.handle(IpcChannel.saveFile, (_event, request: SaveRequest) => fileService.save(request))
   ipcMain.handle(IpcChannel.confirmDiscard, () => dialogs.confirmDiscard())
-  ipcMain.handle(IpcChannel.askRestoreBackup, (_event, savedAt: string) => dialogs.askRestoreBackup(savedAt))
+  ipcMain.handle(IpcChannel.askRestoreBackup, (_event, savedAt: string, unsavedCount: number) =>
+    dialogs.askRestoreBackup(savedAt, unsavedCount),
+  )
   ipcMain.handle(IpcChannel.readBackup, () => backupStore.read())
-  ipcMain.handle(IpcChannel.writeBackup, (_event, backup: Backup) => backupStore.write(backup))
+  ipcMain.handle(IpcChannel.writeBackup, (_event, backup: BackupSet) => backupStore.write(backup))
   ipcMain.handle(IpcChannel.clearBackup, () => backupStore.clear())
 
   ipcMain.on(IpcChannel.requestClose, () => window.close())

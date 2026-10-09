@@ -184,7 +184,7 @@ describe('열기와 복구', () => {
   it('백업에서 복구하면 내용을 넣고 변경 있음 상태가 된다', () => {
     const { api } = createFakeApi()
     const { commands, text, documentState } = setup(api)
-    commands.restoreBackup({ path: null, content: '복구한 글', eol: 'lf', savedAt: '2026-10-08T00:00:00.000Z' })
+    commands.restoreBackup({ path: null, eol: 'lf', unsavedContent: '복구한 글' })
     expect(text()).toBe('복구한 글')
     expect(documentState.isDirty('복구한 글')).toBe(true)
   })

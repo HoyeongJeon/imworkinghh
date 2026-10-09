@@ -1,12 +1,12 @@
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Backup } from '../shared/types'
+import type { BackupSet, Eol, PaneBackup } from '../shared/types'
 import { writeFileAtomic } from './atomic-write'
 import { createSerialQueue } from './serial-queue'
 
 export type BackupStore = {
-  write(backup: Backup): Promise<void>
-  read(): Promise<Backup | null>
+  write(backup: BackupSet): Promise<void>
+  read(): Promise<BackupSet | null>
   clear(): Promise<void>
 }
 
@@ -23,8 +23,7 @@ export function createBackupStore(directory: string): BackupStore {
     read: () =>
       queue.run(async () => {
         try {
-          const parsed: unknown = JSON.parse(await readFile(filePath, 'utf8'))
-          return isBackup(parsed) ? parsed : null
+          return backupSetFrom(JSON.parse(await readFile(filePath, 'utf8')))
         } catch {
           return null
         }
@@ -33,13 +32,49 @@ export function createBackupStore(directory: string): BackupStore {
   }
 }
 
-function isBackup(value: unknown): value is Backup {
-  if (typeof value !== 'object' || value === null) return false
-  const candidate = value as Record<string, unknown>
+type LegacyBackup = { path: string | null; content: string; eol: Eol; savedAt: string }
+
+function backupSetFrom(value: unknown): BackupSet | null {
+  if (isBackupSet(value)) return value
+  // 나란히 쓰기 이전 버전은 문서 하나만 { path, content, eol, savedAt } 형식으로 백업했다.
+  if (isLegacyBackup(value)) {
+    return { savedAt: value.savedAt, panes: [{ path: value.path, eol: value.eol, unsavedContent: value.content }] }
+  }
+  return null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+const isEol = (value: unknown): value is Eol => value === 'lf' || value === 'crlf'
+const isPathOrNull = (value: unknown) => value === null || typeof value === 'string'
+
+function isPaneBackup(value: unknown): value is PaneBackup {
   return (
-    (candidate.path === null || typeof candidate.path === 'string') &&
-    typeof candidate.content === 'string' &&
-    (candidate.eol === 'lf' || candidate.eol === 'crlf') &&
-    typeof candidate.savedAt === 'string'
+    isRecord(value) &&
+    isPathOrNull(value.path) &&
+    isEol(value.eol) &&
+    (value.unsavedContent === null || typeof value.unsavedContent === 'string')
+  )
+}
+
+function isBackupSet(value: unknown): value is BackupSet {
+  return (
+    isRecord(value) &&
+    typeof value.savedAt === 'string' &&
+    Array.isArray(value.panes) &&
+    value.panes.length > 0 &&
+    value.panes.every(isPaneBackup)
+  )
+}
+
+function isLegacyBackup(value: unknown): value is LegacyBackup {
+  return (
+    isRecord(value) &&
+    isPathOrNull(value.path) &&
+    typeof value.content === 'string' &&
+    isEol(value.eol) &&
+    typeof value.savedAt === 'string'
   )
 }

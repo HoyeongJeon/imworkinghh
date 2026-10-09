@@ -37,9 +37,14 @@ export type Settings = {
   defaultFormat: FileFormat
 }
 
-export type Backup = {
+// unsavedContent가 null이면 저장 안 한 변경이 없는 칸이다. 복구할 때 칸 배치를 되살리려고 경로만 남긴다.
+export type PaneBackup = {
   path: string | null
-  content: string
   eol: Eol
+  unsavedContent: string | null
+}
+
+export type BackupSet = {
   savedAt: string
+  panes: PaneBackup[]
 }

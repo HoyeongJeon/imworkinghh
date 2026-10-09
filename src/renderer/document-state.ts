@@ -1,5 +1,5 @@
 import type { OpenedFile } from '../shared/api'
-import type { Backup, Eol, FileFormat, SourceEncoding } from '../shared/types'
+import type { Eol, PaneBackup, FileFormat, SourceEncoding } from '../shared/types'
 
 export type DocumentInfo = {
   path: string | null
@@ -14,9 +14,9 @@ export type DocumentState = {
   isDirty(currentText: string): boolean
   startNew(): void
   loadFromFile(file: OpenedFile): void
-  loadUnsaved(backup: Backup): void
+  loadUnsaved(backup: PaneBackup): void
   markSaved(saved: { path: string; format: FileFormat }, savedText: string): void
-  toBackup(currentText: string, savedAt: string): Backup | null
+  snapshot(currentText: string): PaneBackup
 }
 
 export function createDocumentState(newDocumentEol: Eol): DocumentState {
@@ -47,9 +47,8 @@ export function createDocumentState(newDocumentEol: Eol): DocumentState {
       info = { ...info, path: saved.path, format: saved.format, encoding: 'utf-8' }
       savedText = text
     },
-    toBackup(currentText, savedAt) {
-      if (!isDirty(currentText)) return null
-      return { path: info.path, content: currentText, eol: info.eol, savedAt }
+    snapshot(currentText) {
+      return { path: info.path, eol: info.eol, unsavedContent: isDirty(currentText) ? currentText : null }
     },
   }
 }

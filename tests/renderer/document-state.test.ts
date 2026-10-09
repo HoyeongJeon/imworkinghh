@@ -38,7 +38,7 @@ describe('문서 변경 여부', () => {
 
   it('백업에서 복구한 문서는 저장하기 전까지 변경이 있다', () => {
     const state = createDocumentState('lf')
-    state.loadUnsaved({ path: null, content: '복구한 글', eol: 'lf', savedAt: '2026-10-08T00:00:00.000Z' })
+    state.loadUnsaved({ path: null, eol: 'lf', unsavedContent: '복구한 글' })
     expect(state.isDirty('복구한 글')).toBe(true)
   })
 
@@ -65,24 +65,23 @@ describe('문서 이름', () => {
 })
 
 describe('백업 스냅샷', () => {
-  it('변경이 없으면 백업할 내용이 없다', () => {
+  it('변경이 없으면 경로와 줄바꿈만 남기고 저장 안 한 내용은 없다', () => {
     const state = createDocumentState('lf')
     state.loadFromFile(openedFile)
-    expect(state.toBackup('# 회의록', '2026-10-08T00:00:00.000Z')).toBeNull()
+    expect(state.snapshot('# 회의록')).toEqual({ path: 'C:\\notes\\회의록.md', eol: 'crlf', unsavedContent: null })
   })
 
-  it('새 문서에 아무것도 안 썼으면 백업하지 않는다', () => {
-    expect(createDocumentState('lf').toBackup('', '2026-10-08T00:00:00.000Z')).toBeNull()
+  it('새 문서에 아무것도 안 썼으면 저장 안 한 내용이 없다', () => {
+    expect(createDocumentState('lf').snapshot('')).toEqual({ path: null, eol: 'lf', unsavedContent: null })
   })
 
-  it('변경이 있으면 경로, 내용, 줄바꿈, 시각을 백업한다', () => {
+  it('변경이 있으면 경로, 줄바꿈, 지금 내용을 남긴다', () => {
     const state = createDocumentState('lf')
     state.loadFromFile(openedFile)
-    expect(state.toBackup('# 고친 글', '2026-10-08T00:00:00.000Z')).toEqual({
+    expect(state.snapshot('# 고친 글')).toEqual({
       path: 'C:\\notes\\회의록.md',
-      content: '# 고친 글',
       eol: 'crlf',
-      savedAt: '2026-10-08T00:00:00.000Z',
+      unsavedContent: '# 고친 글',
     })
   })
 })

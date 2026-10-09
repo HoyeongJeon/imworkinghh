@@ -1,7 +1,7 @@
 import type { ImworkingApi } from '../shared/api'
 import { FONT_SIZE_RANGE } from '../shared/settings'
 import type { Settings, ThemeId } from '../shared/types'
-import { createAutosave } from './autosave'
+import { backupSetOf, createAutosave, unsavedPaneCount } from './autosave'
 import { createCloseHandler } from './close-handler'
 import { createDebouncedTask } from './debounce'
 import { createDocumentCommands, type CommandsApi } from './document-commands'
@@ -179,8 +179,9 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   })
 
   const autosave = createAutosave({
-    takeSnapshot: () => documentState.toBackup(editor.getText(), new Date().toISOString()),
+    takeSnapshot: () => backupSetOf([documentState.snapshot(editor.getText())], new Date().toISOString()),
     writeBackup: (backup) => api.writeBackup(backup),
+    clearBackup: () => api.clearBackup(),
   })
 
   const commandsApi: CommandsApi = {
@@ -189,10 +190,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     saveFile: (request) => api.saveFile(request),
     confirmDiscard: () => api.confirmDiscard(),
     closeWindowNow: () => api.closeWindowNow(),
-    clearBackup: async () => {
-      autosave.forgetLastBackup()
-      await api.clearBackup()
-    },
+    clearBackup: () => api.clearBackup(),
   }
 
   const commands = createDocumentCommands({
@@ -269,8 +267,10 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   player.start()
 
   const backup = await api.readBackup()
-  const restored = backup !== null && (await api.askRestoreBackup(backup.savedAt))
-  if (backup && restored) commands.restoreBackup(backup)
+  const unsavedCount = backup ? unsavedPaneCount(backup) : 0
+  const restored = backup !== null && unsavedCount > 0 && (await api.askRestoreBackup(backup.savedAt, unsavedCount))
+  const restoredPane = backup?.panes.find((pane) => pane.unsavedContent !== null)
+  if (restored && restoredPane) commands.restoreBackup(restoredPane)
   else if (backup) await api.clearBackup()
 
   // main은 대기 중인 파일을 넘겨준 뒤부터 요청을 바로 보내므로, 그보다 먼저 받을 준비를 해야 요청이 사라지지 않는다.

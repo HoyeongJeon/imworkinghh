@@ -1,4 +1,4 @@
-import type { Backup, Eol, FileFormat, Settings, SourceEncoding } from './types'
+import type { BackupSet, Eol, FileFormat, Settings, SourceEncoding } from './types'
 
 export type OpenedFile = {
   path: string
@@ -42,9 +42,9 @@ export type ImworkingApi = {
   pathForFile(file: File): string
   saveFile(request: SaveRequest): Promise<SaveResult>
   confirmDiscard(): Promise<DiscardChoice>
-  askRestoreBackup(savedAt: string): Promise<boolean>
-  readBackup(): Promise<Backup | null>
-  writeBackup(backup: Backup): Promise<void>
+  askRestoreBackup(savedAt: string, unsavedCount: number): Promise<boolean>
+  readBackup(): Promise<BackupSet | null>
+  writeBackup(backup: BackupSet): Promise<void>
   clearBackup(): Promise<void>
   onCloseRequested(listener: () => void): void
   requestCloseWindow(): void

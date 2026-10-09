@@ -6,7 +6,7 @@ import type { FileDialogs } from './file-service'
 
 export type AppDialogs = FileDialogs & {
   confirmDiscard(): Promise<DiscardChoice>
-  askRestoreBackup(savedAt: string): Promise<boolean>
+  askRestoreBackup(savedAt: string, unsavedCount: number): Promise<boolean>
 }
 
 const DISCARD_CHOICE_BY_BUTTON: DiscardChoice[] = ['save', 'discard', 'cancel']
@@ -71,8 +71,8 @@ export function createElectronDialogs(window: BrowserWindow): AppDialogs {
       return DISCARD_CHOICE_BY_BUTTON[response] ?? 'cancel'
     },
 
-    async askRestoreBackup(savedAt) {
-      const { options, choseRestore } = restoreBackupDialog(savedAt)
+    async askRestoreBackup(savedAt, unsavedCount) {
+      const { options, choseRestore } = restoreBackupDialog(savedAt, unsavedCount)
       const { response } = await dialog.showMessageBox(window, options)
       return choseRestore(response)
     },

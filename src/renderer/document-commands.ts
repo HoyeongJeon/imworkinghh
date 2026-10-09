@@ -1,5 +1,5 @@
 import type { ImworkingApi, OpenedFile } from '../shared/api'
-import type { Backup, FileFormat } from '../shared/types'
+import type { FileFormat, PaneBackup } from '../shared/types'
 import type { DocumentState } from './document-state'
 
 export type TextSource = { getText(): string; setText(text: string): void }
@@ -28,7 +28,7 @@ export type DocumentCommands = {
   close(): Promise<boolean>
   openPath(path: string): Promise<boolean>
   openRequestedFile(path: string): Promise<boolean>
-  restoreBackup(backup: Backup): void
+  restoreBackup(backup: PaneBackup): void
 }
 
 export function createDocumentCommands(deps: DocumentCommandsDeps): DocumentCommands {
@@ -132,7 +132,7 @@ export function createDocumentCommands(deps: DocumentCommandsDeps): DocumentComm
 
     restoreBackup(backup) {
       documentState.loadUnsaved(backup)
-      editor.setText(backup.content)
+      editor.setText(backup.unsavedContent ?? '')
       deps.onDocumentReplaced()
     },
   }
