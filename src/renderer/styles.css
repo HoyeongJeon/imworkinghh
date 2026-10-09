@@ -232,10 +232,30 @@ body {
   color: var(--color-success);
 }
 
-/* 에디터 */
+/* 에디터: 나란히 놓인 글 칸 */
 #editor {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
+}
+
+.editor-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pane-divider {
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--color-background);
+  border-left: 1px solid var(--color-divider);
+  border-right: 1px solid var(--color-divider);
+}
+
+.pane-divider:hover {
+  background: var(--color-divider);
 }
 
 #editor .cm-editor {
