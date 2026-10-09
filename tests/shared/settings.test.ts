@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultSettings, normalizeSettings } from '../../src/shared/settings'
+import { MAX_PANES } from '../../src/shared/panes'
 
 describe('설정 기본값', () => {
   it('윈도우에서는 Windows Terminal 테마와 Ctrl+` 패닉 키로 시작한다', () => {
@@ -46,7 +47,8 @@ describe('설정 교정', () => {
       ...defaultSettings('win32'),
       theme: 'wsl-ubuntu',
       logSpeed: 'fast',
-      lastFile: 'C:\\notes\\회의록.md',
+      openFiles: ['C:\\notes\\회의록.md'],
+      paneWidths: [0.4, 0.6],
       windowBounds: { x: 10, y: 20, width: 800, height: 600 },
     }
     expect(normalizeSettings(saved, 'win32')).toEqual(saved)
@@ -74,5 +76,47 @@ describe('설정 교정', () => {
 
   it('없는 테마 이름이면 기본 테마로 바꾼다', () => {
     expect(normalizeSettings({ theme: 'solarized' }, 'darwin').theme).toBe('macos-basic')
+  })
+})
+
+describe('열린 파일 목록 설정', () => {
+  it('처음에는 열린 파일이 없다', () => {
+    expect(defaultSettings('win32').openFiles).toEqual([])
+  })
+
+  it('예전 설정의 마지막 파일은 열린 파일 목록으로 옮긴다', () => {
+    const result = normalizeSettings({ lastFile: 'C:\\notes\\a.md' }, 'win32')
+    expect(result.openFiles).toEqual(['C:\\notes\\a.md'])
+    expect(result).not.toHaveProperty('lastFile')
+  })
+
+  it('열린 파일 목록이 있으면 예전 마지막 파일은 쓰지 않는다', () => {
+    const result = normalizeSettings({ openFiles: ['C:\\notes\\b.md'], lastFile: 'C:\\notes\\a.md' }, 'win32')
+    expect(result.openFiles).toEqual(['C:\\notes\\b.md'])
+  })
+
+  it('중복 경로와 문자열이 아닌 값은 버리고 최대 칸 수까지만 둔다', () => {
+    const result = normalizeSettings(
+      { openFiles: ['C:\\notes\\a.md', 'c:\\NOTES\\A.md', 3, '', 'C:\\notes\\b.md', 'C:\\notes\\c.md'] },
+      'win32',
+    )
+    expect(result.openFiles).toEqual(['C:\\notes\\a.md', 'C:\\notes\\b.md', 'C:\\notes\\c.md'].slice(0, MAX_PANES))
+  })
+})
+
+describe('칸 너비 설정', () => {
+  it('처음에는 칸 너비가 정해져 있지 않다', () => {
+    expect(defaultSettings('win32').paneWidths).toEqual([])
+  })
+
+  it('합이 1인 비율 목록은 그대로 둔다', () => {
+    expect(normalizeSettings({ paneWidths: [0.3, 0.7] }, 'win32').paneWidths).toEqual([0.3, 0.7])
+  })
+
+  it('합이 1이 아니거나 양수가 아닌 값이 있으면 빈 목록으로 바꾼다', () => {
+    expect(normalizeSettings({ paneWidths: [0.5, 0.6] }, 'win32').paneWidths).toEqual([])
+    expect(normalizeSettings({ paneWidths: [0.5, '0.5'] }, 'win32').paneWidths).toEqual([])
+    expect(normalizeSettings({ paneWidths: [0, 1] }, 'win32').paneWidths).toEqual([])
+    expect(normalizeSettings({ paneWidths: 'wide' }, 'win32').paneWidths).toEqual([])
   })
 })

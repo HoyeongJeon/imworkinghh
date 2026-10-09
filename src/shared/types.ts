@@ -32,7 +32,8 @@ export type Settings = {
   splitRatio: number
   windowBounds: WindowBounds | null
   lastDirectory: string | null
-  lastFile: string | null
+  openFiles: string[]
+  paneWidths: number[]
   defaultFormat: FileFormat
 }
 

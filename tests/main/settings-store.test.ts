@@ -46,7 +46,7 @@ describe('설정 파일', () => {
 
   it('저장이 끝나기 전에 읽어도 방금 저장한 설정을 돌려준다', async () => {
     const store = createSettingsStore({ filePath: join(directory, 'settings.json'), platform: 'win32' })
-    const changed = { ...defaultSettings('win32'), lastFile: '/notes/a.md' }
+    const changed = { ...defaultSettings('win32'), openFiles: ['/notes/a.md'] }
     const saving = store.save(changed)
     expect(await store.load()).toEqual(changed)
     await saving

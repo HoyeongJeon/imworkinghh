@@ -1,4 +1,5 @@
 import { FILE_FORMATS, LOG_SPEEDS, THEME_IDS, type Settings, type WindowBounds } from './types'
+import { MAX_PANES, isSamePath } from './panes'
 
 export const FONT_SIZE_RANGE = { min: 10, max: 32 }
 export const SPLIT_RATIO_RANGE = { min: 0.1, max: 0.9 }
@@ -17,7 +18,8 @@ export function defaultSettings(platform: string): Settings {
     splitRatio: 0.55,
     windowBounds: null,
     lastDirectory: null,
-    lastFile: null,
+    openFiles: [],
+    paneWidths: [],
     defaultFormat: 'md',
   }
 }
@@ -37,7 +39,8 @@ export function normalizeSettings(raw: unknown, platform: string): Settings {
     splitRatio: pickNumberInRange(raw.splitRatio, SPLIT_RATIO_RANGE, defaults.splitRatio),
     windowBounds: pickWindowBounds(raw.windowBounds),
     lastDirectory: pickNonEmptyString(raw.lastDirectory),
-    lastFile: pickNonEmptyString(raw.lastFile),
+    openFiles: pickOpenFiles(raw.openFiles, raw.lastFile),
+    paneWidths: pickPaneWidths(raw.paneWidths),
     defaultFormat: pickOneOf(raw.defaultFormat, FILE_FORMATS, defaults.defaultFormat),
   }
 }
@@ -74,4 +77,28 @@ function pickWindowBounds(value: unknown): WindowBounds | null {
   if (!numbers.every((n) => typeof n === 'number' && Number.isFinite(n))) return null
   const bounds = { x, y, width, height } as WindowBounds
   return bounds.width > 0 && bounds.height > 0 ? bounds : null
+}
+
+// 나란히 쓰기 이전 버전은 마지막 파일 하나만 lastFile에 저장했다.
+function pickOpenFiles(value: unknown, legacyLastFile: unknown): string[] {
+  if (!Array.isArray(value)) {
+    const lastFile = pickNonEmptyString(legacyLastFile)
+    return lastFile ? [lastFile] : []
+  }
+  const files: string[] = []
+  for (const item of value) {
+    const path = pickNonEmptyString(item)
+    if (path && !files.some((file) => isSamePath(file, path))) files.push(path)
+  }
+  return files.slice(0, MAX_PANES)
+}
+
+const WIDTH_SUM_TOLERANCE = 0.001
+
+function pickPaneWidths(value: unknown): number[] {
+  if (!Array.isArray(value) || value.length === 0) return []
+  const widths = value.filter((width): width is number => typeof width === 'number' && Number.isFinite(width) && width > 0)
+  if (widths.length !== value.length) return []
+  const sum = widths.reduce((total, width) => total + width, 0)
+  return Math.abs(sum - 1) <= WIDTH_SUM_TOLERANCE ? widths : []
 }
