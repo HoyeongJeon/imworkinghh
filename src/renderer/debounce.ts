@@ -1,6 +1,7 @@
 export type DebouncedTask = {
   schedule(): void
   runNow(): void
+  cancel(): void
 }
 
 export function createDebouncedTask(run: () => void, delayMs: number): DebouncedTask {
@@ -21,5 +22,6 @@ export function createDebouncedTask(run: () => void, delayMs: number): Debounced
       cancel()
       run()
     },
+    cancel,
   }
 }

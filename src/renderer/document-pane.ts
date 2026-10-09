@@ -56,12 +56,27 @@ export function createDocumentPane(options: DocumentPaneOptions): DocumentPane {
   const documentState = parts.createDocumentState(options.defaultEol)
   let cursor: CursorPosition = { line: 1, column: 1 }
   let stats = { dirty: false, characters: 0 }
+  let destroyed = false
+
+  // 칸을 닫은 뒤에도 기다리던 열기나 저장이 끝날 수 있으므로, 닫은 칸은 앱에 아무것도 알리지 않는다.
+  const unlessDestroyed =
+    <Args extends unknown[]>(callback: (...args: Args) => void) =>
+    (...args: Args): void => {
+      if (!destroyed) callback(...args)
+    }
+  const notifyStatusChanged = unlessDestroyed(() => options.onStatusChanged())
+  const notifyFileLocationChanged = unlessDestroyed((location: FileLocation | null) =>
+    options.onFileLocationChanged(location),
+  )
+  const notifyBackupStale = unlessDestroyed(() => options.onBackupStale())
+  const notifyUserTyped = unlessDestroyed(() => options.onUserTyped())
+  const notifyFocused = unlessDestroyed(() => options.onFocused())
 
   // 글 전체를 읽어 세는 일은 큰 글에서 무거우므로, 입력할 때마다 하지 않고 입력이 잠깐 멈췄을 때 한다.
   const statsTask = parts.createDebouncedTask(() => {
     const text = editor.getText()
     stats = { dirty: documentState.isDirty(text), characters: countCharacters(text) }
-    options.onStatusChanged()
+    notifyStatusChanged()
   }, DOCUMENT_STATUS_DELAY_MS)
 
   const editor = parts.createEditor({
@@ -73,9 +88,9 @@ export function createDocumentPane(options: DocumentPaneOptions): DocumentPane {
     onTextChanged: () => statsTask.schedule(),
     onCursorMoved: (position) => {
       cursor = position
-      options.onStatusChanged()
+      notifyStatusChanged()
     },
-    onUserTyped: () => options.onUserTyped(),
+    onUserTyped: notifyUserTyped,
   })
 
   const commands = parts.createDocumentCommands({
@@ -87,13 +102,13 @@ export function createDocumentPane(options: DocumentPaneOptions): DocumentPane {
     focusIfOpenElsewhere: (path) => options.focusIfOpenElsewhere(path),
     onFileLocationChanged: (location) => {
       statsTask.runNow()
-      options.onFileLocationChanged(location)
+      notifyFileLocationChanged(location)
     },
     onDocumentReplaced: () => statsTask.runNow(),
-    onBackupStale: () => options.onBackupStale(),
+    onBackupStale: notifyBackupStale,
   })
 
-  element.addEventListener('focusin', () => options.onFocused())
+  element.addEventListener('focusin', notifyFocused)
 
   return {
     element,
@@ -114,6 +129,8 @@ export function createDocumentPane(options: DocumentPaneOptions): DocumentPane {
     setSyntaxHighlight: (enabled) => editor.setSyntaxHighlight(enabled),
     setLineNumbersVisible: (visible) => editor.setLineNumbersVisible(visible),
     destroy() {
+      statsTask.cancel()
+      destroyed = true
       editor.destroy()
       element.remove()
     },

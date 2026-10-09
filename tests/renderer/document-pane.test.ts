@@ -22,11 +22,17 @@ const openedFile: OpenedFile = {
   format: 'md',
 }
 
-function setup({ openElsewhere = false, lineNumbersVisible = false } = {}) {
+const openOpenedFile: CommandsApi['openPath'] = async () => ({ status: 'opened', file: openedFile })
+
+function setup({
+  openElsewhere = false,
+  lineNumbersVisible = false,
+  openPath = openOpenedFile,
+}: { openElsewhere?: boolean; lineNumbersVisible?: boolean; openPath?: CommandsApi['openPath'] } = {}) {
   const events: string[] = []
   const api: CommandsApi = {
     openFileDialog: async () => ({ status: 'canceled' }),
-    openPath: async () => ({ status: 'opened', file: openedFile }),
+    openPath,
     saveFile: async () => ({ status: 'canceled' }),
     confirmDiscard: async () => 'cancel',
   }
@@ -110,5 +116,30 @@ describe('글 칸', () => {
     pane.destroy()
     expect(pane.element.isConnected).toBe(false)
     expect(pane.element.querySelector('.cm-editor')).toBeNull()
+  })
+
+  it('입력한 뒤 바로 칸을 없애면 상태바 정보가 바뀌었다고 알리지 않는다', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { pane, view, events } = setup()
+    view().dispatch({ changes: { from: 0, insert: '가나' }, userEvent: 'input.type' })
+    pane.destroy()
+    events.length = 0
+    vi.advanceTimersByTime(DOCUMENT_STATUS_DELAY_MS)
+    expect(events).toEqual([])
+  })
+
+  it('칸을 없앤 뒤에 파일 열기가 끝나면 아무것도 알리지 않는다', async () => {
+    let finishOpening: (result: Awaited<ReturnType<CommandsApi['openPath']>>) => void = () => {}
+    const { pane, events } = setup({
+      openPath: () =>
+        new Promise((resolve) => {
+          finishOpening = resolve
+        }),
+    })
+    const opening = pane.commands.openPath('/notes/a.md')
+    pane.destroy()
+    finishOpening({ status: 'opened', file: openedFile })
+    await opening
+    expect(events).toEqual([])
   })
 })

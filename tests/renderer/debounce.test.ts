@@ -30,4 +30,13 @@ describe('잠시 미뤄 한 번만 하는 작업', () => {
     vi.advanceTimersByTime(500)
     expect(run).toHaveBeenCalledTimes(1)
   })
+
+  it('취소하면 기다리던 요청을 실행하지 않는다', () => {
+    const run = vi.fn()
+    const task = createDebouncedTask(run, 200)
+    task.schedule()
+    task.cancel()
+    vi.advanceTimersByTime(500)
+    expect(run).not.toHaveBeenCalled()
+  })
 })
