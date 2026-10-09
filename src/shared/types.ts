@@ -21,6 +21,7 @@ export type SourceEncoding = 'utf-8' | 'utf-8-bom' | 'utf-16le' | 'utf-16be' | '
 export type WindowBounds = { x: number; y: number; width: number; height: number }
 
 export type Settings = {
+  stealthMode: boolean
   theme: ThemeId
   syntaxHighlight: boolean
   panicEnabled: boolean

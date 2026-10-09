@@ -22,6 +22,20 @@ describe('설정 기본값', () => {
   })
 })
 
+describe('은신 모드 설정', () => {
+  it('은신 모드는 켜진 상태로 시작한다', () => {
+    expect(defaultSettings('win32').stealthMode).toBe(true)
+  })
+
+  it('은신 모드를 끈 설정은 다시 읽어도 꺼져 있다', () => {
+    expect(normalizeSettings({ stealthMode: false }, 'win32').stealthMode).toBe(false)
+  })
+
+  it('은신 모드 값이 참/거짓이 아니면 켜진 상태로 본다', () => {
+    expect(normalizeSettings({ stealthMode: 'off' }, 'win32').stealthMode).toBe(true)
+  })
+})
+
 describe('설정 교정', () => {
   it('저장된 값이 없으면 기본값을 쓴다', () => {
     expect(normalizeSettings(undefined, 'win32')).toEqual(defaultSettings('win32'))

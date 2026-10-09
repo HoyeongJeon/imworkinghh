@@ -16,7 +16,8 @@ import { createSettingsDialog } from './settings-dialog'
 import { APP_SHORTCUTS, bindShortcuts } from './shortcuts'
 import { createPanicToggle } from './split-layout'
 import { createSplitter } from './splitter'
-import { countCharacters, createStatusbar } from './statusbar'
+import { UNTITLED_NAME, countCharacters, createStatusbar } from './statusbar'
+import { createSessionHider, windowTitleFor } from './stealth'
 import { THEMES, getTheme, nextThemeId, renderPrompt, themeCssVariables } from './themes'
 import { createTitlebar } from './titlebar'
 
@@ -61,8 +62,25 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
       column: cursor.column,
       characters: documentStats.characters,
       encoding: documentState.info().encoding,
-      logPaused: player.isPaused(),
+      logPaused: settings.stealthMode && player.isPaused(),
     })
+    refreshWindowTitle()
+  }
+
+  let renderedTitlebar = ''
+  function refreshWindowTitle(): void {
+    const theme = getTheme(settings.theme)
+    const title = windowTitleFor({
+      stealthMode: settings.stealthMode,
+      disguisedTitle: theme.windowTitle,
+      documentName: documentState.fileName() ?? UNTITLED_NAME,
+      dirty: documentStats.dirty,
+    })
+    doc.title = title
+    const titlebarKey = `${theme.titlebarStyle}|${title}`
+    if (titlebarKey === renderedTitlebar) return
+    renderedTitlebar = titlebarKey
+    titlebar.render(theme.titlebarStyle, title)
   }
 
   // 글 전체를 읽어 세는 일은 큰 글에서 무거우므로, 입력할 때마다 하지 않고 입력이 잠깐 멈췄을 때 한다.
@@ -84,6 +102,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     onUserTyped: () => typingActivity.markTyped(),
   })
 
+  const sessionHider = createSessionHider(player)
   const panic = createPanicToggle()
   const splitter = createSplitter({
     container: elementById('workspace'),
@@ -99,12 +118,23 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
     for (const [name, value] of Object.entries(themeCssVariables(theme))) {
       doc.documentElement.style.setProperty(name, value)
     }
-    doc.title = theme.windowTitle
-    titlebar.render(theme.titlebarStyle, theme.windowTitle)
+    refreshWindowTitle()
+  }
+
+  function applyStealthMode(): void {
+    elementById('workspace').classList.toggle('session-hidden', !settings.stealthMode)
+    if (settings.stealthMode) {
+      sessionHider.show()
+    } else {
+      if (panic.isPanicked()) splitter.setRatio(panic.toggle(splitter.getRatio()))
+      sessionHider.hide()
+    }
+    refreshStatus()
   }
 
   function applySettings(previous: Settings | null): void {
     if (!previous || previous.theme !== settings.theme) applyTheme(settings.theme)
+    if (!previous || previous.stealthMode !== settings.stealthMode) applyStealthMode()
     if (previous && previous.syntaxHighlight !== settings.syntaxHighlight) {
       editor.setSyntaxHighlight(settings.syntaxHighlight)
     }
@@ -193,11 +223,16 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
         combo: () => APP_SHORTCUTS.toggleSyntaxHighlight,
         run: () => updateSettings({ syntaxHighlight: !settings.syntaxHighlight }),
       },
-      { combo: () => APP_SHORTCUTS.toggleLogPause, run: toggleLogPause },
+      { combo: () => (settings.stealthMode ? APP_SHORTCUTS.toggleLogPause : null), run: toggleLogPause },
       { combo: () => APP_SHORTCUTS.cycleTheme, run: () => updateSettings({ theme: nextThemeId(settings.theme) }) },
+      {
+        combo: () => APP_SHORTCUTS.toggleStealthMode,
+        run: () => updateSettings({ stealthMode: !settings.stealthMode }),
+      },
       { combo: () => APP_SHORTCUTS.increaseFontSize, run: () => changeFontSize(1) },
       { combo: () => APP_SHORTCUTS.decreaseFontSize, run: () => changeFontSize(-1) },
-      { combo: () => (settings.panicEnabled ? settings.panicKey : null), run: togglePanic },
+      // 은신 모드를 끄면 숨길 가짜 화면이 없으므로 패닉 키도 쓰지 않는다.
+      { combo: () => (settings.stealthMode && settings.panicEnabled ? settings.panicKey : null), run: togglePanic },
     ],
     api.platform,
   )

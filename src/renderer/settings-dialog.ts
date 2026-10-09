@@ -127,6 +127,7 @@ export function createSettingsDialog({ host, platform, themes, onChange }: Setti
 
     panel.append(
       title,
+      checkboxRow('은신 모드', 'stealthMode', settings.stealthMode, (checked) => update({ stealthMode: checked })),
       selectRow(
         '테마',
         'theme',

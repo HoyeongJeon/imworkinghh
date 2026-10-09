@@ -7,6 +7,7 @@ export const APP_SHORTCUTS = {
   toggleSyntaxHighlight: 'Mod+Shift+H',
   toggleLogPause: 'Mod+Shift+P',
   cycleTheme: 'Mod+Shift+T',
+  toggleStealthMode: 'Mod+Shift+M',
   increaseFontSize: 'Mod+=',
   decreaseFontSize: 'Mod+-',
 } as const

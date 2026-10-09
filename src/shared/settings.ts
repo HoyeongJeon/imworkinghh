@@ -6,6 +6,7 @@ export const SPLIT_RATIO_RANGE = { min: 0.1, max: 0.9 }
 export function defaultSettings(platform: string): Settings {
   const isMac = platform === 'darwin'
   return {
+    stealthMode: true,
     theme: isMac ? 'macos-basic' : 'windows-terminal',
     syntaxHighlight: true,
     panicEnabled: true,
@@ -25,6 +26,7 @@ export function normalizeSettings(raw: unknown, platform: string): Settings {
   const defaults = defaultSettings(platform)
   if (!isRecord(raw)) return defaults
   return {
+    stealthMode: pickBoolean(raw.stealthMode, defaults.stealthMode),
     theme: pickOneOf(raw.theme, THEME_IDS, defaults.theme),
     syntaxHighlight: pickBoolean(raw.syntaxHighlight, defaults.syntaxHighlight),
     panicEnabled: pickBoolean(raw.panicEnabled, defaults.panicEnabled),

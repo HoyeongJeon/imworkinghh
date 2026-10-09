@@ -61,6 +61,16 @@ describe('설정 창', () => {
     expect(changes).toEqual([{ logSpeed: 'fast' }, { syntaxHighlight: false }])
   })
 
+  it('은신 모드를 끄면 꺼진 설정을 알린다', () => {
+    const { dialog, field, changes } = setup()
+    dialog.open(defaultSettings('win32'))
+    const checkbox = field<HTMLInputElement>('stealthMode')
+    expect(checkbox.checked).toBe(true)
+    checkbox.checked = false
+    checkbox.dispatchEvent(new Event('change'))
+    expect(changes.at(-1)).toEqual({ stealthMode: false })
+  })
+
   it('잘못된 패닉 키 조합은 받아들이지 않고 표시한다', () => {
     const { dialog, field, changes } = setup()
     dialog.open(defaultSettings('win32'))

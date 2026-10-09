@@ -147,6 +147,15 @@ body {
   min-height: 0;
 }
 
+#workspace.session-hidden {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+#workspace.session-hidden #log,
+#workspace.session-hidden #split-handle {
+  display: none;
+}
+
 #split-handle {
   cursor: row-resize;
   touch-action: none;

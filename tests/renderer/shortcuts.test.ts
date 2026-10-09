@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import {
+  APP_SHORTCUTS,
   bindShortcuts,
   displayShortcut,
   isUsableAppShortcut,
@@ -49,6 +50,15 @@ describe('단축키', () => {
 
   it('조합 시작 신호(keyCode 229)가 오면 isComposing이 꺼져 있어도 반응하지 않는다', () => {
     expect(matchesShortcut(press({ ctrlKey: true, keyCode: 229 }), 'Mod+S', 'win32')).toBe(false)
+  })
+
+  it('은신 모드는 Mod+Shift+M으로 켜고 끈다', () => {
+    expect(APP_SHORTCUTS.toggleStealthMode).toBe('Mod+Shift+M')
+  })
+
+  it('앱 단축키와 기본 패닉 키는 서로 겹치지 않는다', () => {
+    const combos = [...Object.values(APP_SHORTCUTS), 'Mod+`', 'Mod+Shift+.']
+    expect(new Set(combos).size).toBe(combos.length)
   })
 
   it('알 수 없는 키나 보조키 이름은 조합으로 인정하지 않는다', () => {
