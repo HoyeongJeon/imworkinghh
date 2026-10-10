@@ -1,5 +1,6 @@
 import { isSamePath } from '../shared/panes'
 import type { BackupSet, PaneBackup } from '../shared/types'
+import type { CommandLock } from './command-lock'
 import type { DocumentCommands } from './document-commands'
 import type { PaneSet } from './pane-set'
 
@@ -23,6 +24,7 @@ export type WorkspaceCommands = {
 export type WorkspaceDeps = {
   panes: PaneSet<WorkspacePane>
   maxPanes: number
+  lock: CommandLock
   onBackupStale(): void
   clearBackup(): Promise<void>
   closeWindowNow(): void
@@ -84,10 +86,12 @@ export function createWorkspaceCommands(deps: WorkspaceDeps): WorkspaceCommands 
       return true
     },
 
-    openRequestedFile(path, target = panes.focused()) {
-      if (target !== panes.focused()) focus(target)
-      return target.commands.openRequestedFile(path)
-    },
+    // 진행 중인 명령(예: 칸 닫기 확인)을 기다리는 동안 대상 칸이 닫힐 수 있으므로, 열 칸은 기다린 뒤에 고른다.
+    openRequestedFile: deps.lock.afterRunning(async (path: string, target?: WorkspacePane) => {
+      const pane = target && panes.all().includes(target) ? target : panes.focused()
+      if (pane !== panes.focused()) focus(pane)
+      return pane.commands.openRequestedFile(path)
+    }),
 
     async restore(backup) {
       for (const [index, paneBackup] of panesToRestore(backup.panes, deps.maxPanes).entries()) {

@@ -358,23 +358,15 @@ describe('명령 겹침', () => {
     expect(await saving).toBe(true)
   })
 
-  it('다른 프로그램에서 연 파일은 진행 중인 명령이 끝난 뒤에 연다', async () => {
+  // 기다리는 동안 이 칸이 닫힐 수 있어서 기다리기와 칸 고르기는 workspace-commands가 맡는다. 여기서도 기다리면 두 겹으로 기다리다 멈춘다.
+  it('진행 중인 명령이 있어도 다른 프로그램에서 연 파일 열기는 칸에서 잠금을 기다리지 않는다', async () => {
     const pending = pendingSave()
-    const { api, calls } = createFakeApi({
-      saveFile: pending.saveFile,
-      openPath: async (path) => {
-        calls.push(`openPath ${path}`)
-        return openedResult
-      },
-    })
+    const { api } = createFakeApi({ saveFile: pending.saveFile, openPath: async () => openedResult })
     const { commands, text } = setup(api)
     const saving = commands.save()
-    const opening = commands.openRequestedFile('/notes/a.md')
-    await Promise.resolve()
-    expect(calls).not.toContain('openPath /notes/a.md')
+    expect(await commands.openRequestedFile('/notes/a.md')).toBe(true)
+    expect(text()).toBe('# 열린 글')
     pending.finish()
     await saving
-    expect(await opening).toBe(true)
-    expect(text()).toBe('# 열린 글')
   })
 })

@@ -1,18 +1,35 @@
 import { describe, expect, it } from 'vitest'
+import { createCommandLock } from '../../src/renderer/command-lock'
 import { createPaneSet } from '../../src/renderer/pane-set'
 import { createWorkspaceCommands, panesToRestore, type WorkspacePane } from '../../src/renderer/workspace-commands'
 import type { PaneBackup } from '../../src/shared/types'
 
-type FakePane = WorkspacePane & { name: string; state: { path: string | null; dirty: boolean; closeAnswer: boolean } }
+type FakePaneState = {
+  path: string | null
+  dirty: boolean
+  closeAnswer: boolean
+  // 정하면 저장 확인 대화 상자가 떠 있는 것처럼 이 약속이 끝날 때까지 답하지 않는다.
+  closeDialog: Promise<void> | null
+  openDialog: Promise<void> | null
+}
+
+type FakePane = WorkspacePane & { name: string; state: FakePaneState }
+
+function deferred() {
+  let resolve: () => void = () => undefined
+  const promise = new Promise<void>((done) => (resolve = done))
+  return { promise, resolve }
+}
 
 function setup({ maxPanes = 2 } = {}) {
   const log: string[] = []
   const missing = new Set<string>()
+  const lock = createCommandLock()
   let created = 0
 
   function createFakePane(): FakePane {
     const name = `pane${++created}`
-    const state = { path: null as string | null, dirty: false, closeAnswer: true }
+    const state: FakePaneState = { path: null, dirty: false, closeAnswer: true, closeDialog: null, openDialog: null }
     return {
       name,
       state,
@@ -20,10 +37,11 @@ function setup({ maxPanes = 2 } = {}) {
       isDirty: () => state.dirty,
       focus: () => log.push(`${name} focus`),
       commands: {
-        confirmClose: async () => {
+        confirmClose: lock.unlessBusy(async () => {
           log.push(`${name} confirmClose`)
+          if (state.closeDialog) await state.closeDialog
           return state.closeAnswer
-        },
+        }),
         openPath: async (path) => {
           log.push(`${name} openPath ${path}`)
           if (missing.has(path)) return false
@@ -32,6 +50,7 @@ function setup({ maxPanes = 2 } = {}) {
         },
         openRequestedFile: async (path) => {
           log.push(`${name} openRequestedFile ${path}`)
+          if (state.openDialog) await state.openDialog
           state.path = path
           return true
         },
@@ -55,6 +74,7 @@ function setup({ maxPanes = 2 } = {}) {
   const workspace = createWorkspaceCommands({
     panes,
     maxPanes,
+    lock,
     onBackupStale: () => log.push('backupStale'),
     clearBackup: async () => {
       log.push('clearBackup')
@@ -64,7 +84,7 @@ function setup({ maxPanes = 2 } = {}) {
   const names = () => panes.all().map((pane) => pane.name)
   const paneNamed = (name: string) => panes.all().find((pane) => pane.name === name)!
   const logFrom = (start: number) => log.slice(start)
-  return { panes, workspace, log, missing, names, paneNamed, logFrom }
+  return { panes, workspace, lock, log, missing, names, paneNamed, logFrom }
 }
 
 const pane = (path: string | null, unsavedContent: string | null): PaneBackup => ({ path, eol: 'lf', unsavedContent })
@@ -186,6 +206,65 @@ describe('다른 프로그램에서 연 파일', () => {
     await workspace.openRequestedFile('C:\\notes\\a.md', paneNamed('pane1'))
     expect(logFrom(start)).toEqual(['pane1 focus', 'pane1 openRequestedFile C:\\notes\\a.md'])
     expect(panes.focused()).toBe(paneNamed('pane1'))
+  })
+
+  it('진행 중인 명령이 있으면 끝난 뒤에 연다', async () => {
+    const { workspace, paneNamed, log } = setup()
+    const dialog = deferred()
+    paneNamed('pane1').state.closeDialog = dialog.promise
+    const confirming = paneNamed('pane1').commands.confirmClose()
+    const opening = workspace.openRequestedFile('C:\\notes\\a.md')
+    await Promise.resolve()
+    expect(log).not.toContain('pane1 openRequestedFile C:\\notes\\a.md')
+    dialog.resolve()
+    await confirming
+    expect(await opening).toBe(true)
+    expect(log.at(-1)).toBe('pane1 openRequestedFile C:\\notes\\a.md')
+  })
+
+  it('파일을 여는 동안에는 다른 칸 명령을 받지 않는다', async () => {
+    const { workspace, lock, paneNamed } = setup()
+    const dialog = deferred()
+    paneNamed('pane1').state.openDialog = dialog.promise
+    const opening = workspace.openRequestedFile('C:\\notes\\a.md')
+    await Promise.resolve()
+    expect(await lock.unlessBusy(async () => true)()).toBe(false)
+    dialog.resolve()
+    expect(await opening).toBe(true)
+  })
+
+  it('칸을 닫는 동안 들어온 파일은 남은 칸에 연다', async () => {
+    const { workspace, panes, names, paneNamed, log } = setup()
+    workspace.addPane()
+    const dialog = deferred()
+    paneNamed('pane2').state.closeDialog = dialog.promise
+    const closing = workspace.closeFocusedPane()
+    const opening = workspace.openRequestedFile('C:\\notes\\a.md')
+    await Promise.resolve()
+    dialog.resolve()
+    expect(await closing).toBe(true)
+    expect(await opening).toBe(true)
+    expect(names()).toEqual(['pane1'])
+    expect(log).not.toContain('pane2 openRequestedFile C:\\notes\\a.md')
+    expect(log.at(-1)).toBe('pane1 openRequestedFile C:\\notes\\a.md')
+    expect(panes.focused()).toBe(paneNamed('pane1'))
+  })
+
+  it('파일을 끌어놓은 칸이 기다리는 동안 닫히면 남은 칸에 연다', async () => {
+    const { workspace, names, paneNamed, log } = setup()
+    workspace.addPane()
+    const dropTarget = paneNamed('pane2')
+    const dialog = deferred()
+    dropTarget.state.closeDialog = dialog.promise
+    const closing = workspace.closeFocusedPane()
+    const opening = workspace.openRequestedFile('C:\\notes\\a.md', dropTarget)
+    await Promise.resolve()
+    dialog.resolve()
+    await closing
+    expect(await opening).toBe(true)
+    expect(names()).toEqual(['pane1'])
+    expect(log).not.toContain('pane2 openRequestedFile C:\\notes\\a.md')
+    expect(log.at(-1)).toBe('pane1 openRequestedFile C:\\notes\\a.md')
   })
 })
 

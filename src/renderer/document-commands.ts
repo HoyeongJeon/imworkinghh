@@ -29,6 +29,7 @@ export type DocumentCommands = {
   saveAs(): Promise<boolean>
   confirmClose(): Promise<boolean>
   openPath(path: string): Promise<boolean>
+  // 잠금을 기다리지 않는다. 기다리는 동안 이 칸이 닫힐 수 있으므로 workspace-commands가 기다린 뒤 열 칸을 고른다.
   openRequestedFile(path: string): Promise<boolean>
   restore(backup: PaneBackup): Promise<boolean>
 }
@@ -98,7 +99,7 @@ export function createDocumentCommands(deps: DocumentCommandsDeps): DocumentComm
 
     openPath: lock.unlessBusy(openSilently),
 
-    openRequestedFile: lock.afterRunning(async (path: string) => {
+    async openRequestedFile(path) {
       if (deps.focusIfOpenElsewhere(path)) return false
       if (!(await resolveUnsavedChanges())) return false
       const result = await api.openPath(path, { reportErrors: true })
@@ -106,7 +107,7 @@ export function createDocumentCommands(deps: DocumentCommandsDeps): DocumentComm
       showOpenedFile(result.file)
       deps.onBackupStale()
       return true
-    }),
+    },
 
     restore: lock.unlessBusy(async (backup: PaneBackup) => {
       if (backup.unsavedContent === null) return backup.path === null ? false : openSilently(backup.path)

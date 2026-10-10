@@ -178,6 +178,7 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   const workspace = createWorkspaceCommands({
     panes,
     maxPanes: MAX_PANES,
+    lock: commandLock,
     onBackupStale: () => void autosave.flushNow(),
     clearBackup: () => backupFile.clearBackup(),
     closeWindowNow: () => api.closeWindowNow(),
