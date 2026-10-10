@@ -55,7 +55,7 @@ macOS에서는 `Ctrl`이 `Cmd`로 바뀐다. 단, 칸 이동은 macOS에서도 `
 - 기존 단축키는 지금 칸에 적용된다: 새 문서(`Ctrl+N`), 열기(`Ctrl+O`), 저장(`Ctrl+S`), 다른 이름으로 저장(`Ctrl+Shift+S`).
 - 파일을 끌어다 놓으면 놓은 자리의 칸에 연다. 칸 밖(가짜 세션, 상태바)에 놓으면 지금 칸에 연다.
 - 다른 프로그램에서 연 파일(탐색기, 두 번째 실행, macOS `open-file`)은 지금 칸에 연다.
-- 이미 다른 칸에 열려 있는 파일을 열면, 새로 열지 않고 그 칸으로 커서를 옮긴다. 두 칸이 같은 파일을 따로 저장해 서로 덮어쓰는 일을 막는다. 경로는 Windows와 macOS 모두 대소문자를 구분하지 않고 비교한다 (두 OS의 기본 파일 시스템이 대소문자를 구분하지 않음).
+- 이미 다른 칸에 열려 있는 파일을 열면, 새로 열지 않고 그 칸으로 커서를 옮긴다. 두 칸이 같은 파일을 따로 저장해 서로 덮어쓰는 일을 막는다. 경로는 Windows와 macOS 모두 대소문자를 구분하지 않고 비교한다 (두 OS의 기본 파일 시스템이 대소문자를 구분하지 않음). macOS가 한글 파일 이름을 자모로 풀어(NFD) 넘겨줄 수 있으므로 NFC로 맞춘 뒤 비교한다.
 - 상태바와 은신 모드를 끈 상태의 창 제목(`notes.md ● - md-writer`)은 지금 칸의 문서를 따른다. 지금 칸이 바뀌면 바로 바뀐다.
 
 ## 4. 저장, 백업, 닫기, 다시 열기
@@ -78,6 +78,7 @@ macOS에서는 `Ctrl`이 `Cmd`로 바뀐다. 단, 칸 이동은 macOS에서도 `
 ### 4.3 복구
 
 - 시작할 때 백업에 저장 안 한 칸이 있으면 한 번만 묻는다: "저장되지 않은 글이 N개 있습니다. 복구할까요?" (버튼과 Esc 동작은 바탕 문서와 같다. 창을 닫거나 Esc를 누르면 복구한다.)
+- N은 실제로 복구할 칸(`panesToRestore`, 아래의 `MAX_PANES` 규칙을 거친 칸) 안의 저장 안 한 칸 수다. 저장 안 한 칸이 없으면 묻지 않고 백업을 지운다.
 - 복구하면 백업에 있던 칸 수와 순서대로 칸을 연다.
   - `unsavedContent`가 있는 칸은 그 내용을 넣는다 (변경 있음 상태).
   - 변경 없는 칸은 파일을 다시 연다. 파일이 없어졌으면 그 칸은 빈 새 문서로 연다.
@@ -94,11 +95,12 @@ macOS에서는 `Ctrl`이 `Cmd`로 바뀐다. 단, 칸 이동은 macOS에서도 `
 
 시작 순서:
 
-1. 백업이 있으면 복구할지 묻는다. 복구하면 4.3대로 연다.
+1. 백업에 저장 안 한 칸이 있으면 복구할지 묻는다. 복구하면 4.3대로 연다.
 2. 복구하지 않았고 다른 프로그램에서 연 파일이 있으면, 칸 하나에 그 파일만 연다.
 3. 둘 다 아니면 마지막에 열려 있던 파일들(`openFiles`)을 칸 순서대로 연다. 없어진 파일은 건너뛰고 조용히 넘어간다. 열 파일이 하나도 없으면 빈 칸 하나로 시작한다.
 
 - 칸 너비 비율(`paneWidths`)은 칸 수가 같을 때만 되살린다. 다르면 같은 너비로 나눈다.
+- 시작이 끝나기 전에는 문서·칸 단축키와 파일 끌어놓기를 무시한다. 복구가 명령 잠금을 쓰므로, 먼저 들어온 명령이 잠금을 잡으면 저장 안 한 글이 화면에 들어오지 못한다.
 
 ## 5. 설정
 
@@ -210,10 +212,11 @@ export function canAddPane(count: number, availablePx: number, minPanePx: number
 |---|---|
 | `shared/types.ts` | `Backup` → `PaneBackup`, `BackupSet`. `Settings.lastFile` → `openFiles`, `paneWidths` 추가 |
 | `shared/settings.ts` | 새 항목 교정, `lastFile` 옮기기 |
-| `main/backup-store.ts` | `BackupSet` 읽기/쓰기, 기존 형식 읽기 |
+| `main/backup-store.ts` | `BackupSet` 읽기/쓰기, 기존 형식 읽기. 잠긴 파일은 다시 읽고(`atomic-write.ts`의 `retryWhileLocked`), 그래도 못 읽으면 실패를 알린다. 깨진 백업은 `current.bad.json`으로 옮긴다 |
 | `main/dialog-options.ts` | 복구 질문에 글 개수 표시 |
-| `renderer/document-commands.ts` | `close()` → `confirmClose()` (창을 닫지 않고 이 칸을 닫아도 되는지만 확인). 백업을 직접 지우지 않고 `onBackupStale()`로 알린다. `restoreBackup(backup)` → `restore(paneBackup)`. 명령이 진행 중인지 나타내는 잠금을 직접 갖지 않고 인자로 받아, 모든 칸이 같은 잠금을 쓴다. 다른 칸에 이미 열린 파일인지 `focusIfOpenElsewhere(path)`로 묻고, 열려 있으면 열지 않는다. |
-| `renderer/autosave.ts` | 스냅샷이 `BackupSet \| null`. `null`이면 백업을 지운다. `flushNow()` 추가 |
+| `renderer/document-commands.ts` | `close()` → `confirmClose()` (창을 닫지 않고 이 칸을 닫아도 되는지만 확인). 백업을 직접 지우지 않고 `onBackupStale()`로 알린다. `restoreBackup(backup)` → `restore(paneBackup)`. 명령이 진행 중인지 나타내는 잠금을 직접 갖지 않고 인자로 받아, 모든 칸이 같은 잠금을 쓴다. 다른 칸에 이미 열린 파일인지 `focusIfOpenElsewhere(path)`로 묻고, 열려 있으면 열지 않는다. `openRequestedFile`은 잠금을 기다리지 않는다 (아래 `workspace-commands`가 기다린다). |
+| `renderer/autosave.ts` | 스냅샷이 `BackupSet \| null`. `null`이면 백업을 지운다. `flushNow()` 추가. `guardUnreadBackup`: 시작할 때 읽지 못한 백업은 새 백업을 쓰기 전에는 지우지 않는다 |
+| `renderer/debounce.ts` | `cancel()` 추가. 닫은 칸에서 기다리던 글자수 세기를 취소한다 |
 | `renderer/file-drop.ts` | 놓은 자리의 요소를 함께 알린다 |
 | `renderer/shortcuts.ts` | `Tab`, `\` 키 이름, 칸 단축키 |
 | `renderer/close-handler.ts` | 문서 하나 닫기 대신 `closeWindow()` 사용 |
@@ -223,6 +226,8 @@ export function canAddPane(count: number, availablePx: number, minPanePx: number
 | `shared/api.ts`, `main/dialogs.ts`, `main/ipc.ts`, `preload/index.ts` | 복구 질문에 저장 안 한 글 개수를 넘긴다 |
 
 main의 파일 열기·저장(`file-service`, `documents`)은 바뀌지 않는다. IPC는 복구 질문에 글 개수를 더하는 것만 바뀐다.
+
+새 모듈의 세부: `document-pane`은 닫은 뒤 끝난 열기·저장·입력을 앱에 알리지 않는다. `workspace-commands`는 공용 명령 잠금을 받아, 다른 프로그램에서 연 파일은 진행 중인 명령이 끝난 뒤 열 칸을 고른다 (기다리는 동안 대상 칸이 닫혔으면 지금 칸).
 
 ## 7. 오류와 경계
 
@@ -235,6 +240,10 @@ main의 파일 열기·저장(`file-service`, `documents`)은 바뀌지 않는�
 | 같은 파일을 두 번째 칸에서 열기 | 이미 연 칸으로 커서만 옮긴다 |
 | 창이 좁아 칸 최소 너비를 못 지킴 | `Ctrl+\`가 아무것도 하지 않는다. 이미 열린 칸은 비율대로 줄어든다 |
 | 명령 진행 중 다른 칸의 명령 | 무시한다 (외부에서 연 파일만 기다렸다가 연다) |
+| 외부에서 연 파일을 기다리는 동안 대상 칸이 닫힘 | 남은 지금 칸에 연다 |
+| 복구·다시 열기 때 창이 좁아 칸 최소 너비를 못 지킴 | 그래도 백업이나 `openFiles`의 칸을 모두 연다. 칸은 비율대로 줄어든다 |
+| 백업 파일이 계속 잠겨 읽지 못함 | 복구를 건너뛴다. 새 백업을 쓰기 전에는 그 백업을 지우지 않는다 |
+| 백업 파일이 깨짐 | `current.bad.json`으로 옮기고 백업 없이 시작한다 |
 
 ## 8. 기준값
 

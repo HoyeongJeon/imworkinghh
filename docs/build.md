@@ -48,4 +48,4 @@ npm run dist:win
 | 설정 | `%APPDATA%\imworkinghh\settings.json` | `~/Library/Application Support/imworkinghh/settings.json` |
 | 자동 백업 | `%APPDATA%\imworkinghh\backup\current.json` | `~/Library/Application Support/imworkinghh/backup/current.json` |
 
-설정 파일이 깨지면 `settings.bad.json`으로 옮겨지고 기본값으로 시작한다.
+설정 파일이 깨지면 `settings.bad.json`으로 옮겨지고 기본값으로 시작한다. 백업 파일이 깨지면 같은 폴더의 `current.bad.json`으로 옮겨지고 복구 없이 시작한다.
