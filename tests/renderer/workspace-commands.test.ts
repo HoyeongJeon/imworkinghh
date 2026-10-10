@@ -167,6 +167,19 @@ describe('창 닫기', () => {
     expect(log).not.toContain('clearBackup')
     expect(log).not.toContain('closeWindowNow')
   })
+
+  it('앞 칸은 저장했어도 뒤 칸에서 취소하면 백업을 지우지 않고 창도 닫지 않는다', async () => {
+    const { workspace, paneNamed, log } = setup()
+    workspace.addPane()
+    paneNamed('pane1').state.dirty = true
+    paneNamed('pane2').state.dirty = true
+    paneNamed('pane2').state.closeAnswer = false
+    expect(await workspace.closeWindow()).toBe(false)
+    expect(log).toContain('pane1 confirmClose')
+    expect(log).toContain('pane2 confirmClose')
+    expect(log).not.toContain('clearBackup')
+    expect(log).not.toContain('closeWindowNow')
+  })
 })
 
 describe('같은 파일 찾기', () => {
