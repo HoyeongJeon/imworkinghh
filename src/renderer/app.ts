@@ -292,6 +292,9 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   bindShortcuts(
     doc.defaultView ?? window,
     [
+      // 같은 조합이면 앞의 것만 실행되므로, 사용자가 고른 패닉 키가 앱 단축키(칸 닫기 등)에 가려지지 않게 맨 앞에 둔다.
+      // 은신 모드를 끄면 숨길 가짜 화면이 없으므로 패닉 키도 쓰지 않는다.
+      { combo: () => (settings.stealthMode && settings.panicEnabled ? settings.panicKey : null), run: togglePanic },
       { combo: () => APP_SHORTCUTS.newDocument, run: afterStartup(() => void focusedCommands().newDocument()) },
       { combo: () => APP_SHORTCUTS.open, run: afterStartup(() => void focusedCommands().open()) },
       { combo: () => APP_SHORTCUTS.save, run: afterStartup(() => void focusedCommands().save()) },
@@ -315,8 +318,6 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
       },
       { combo: () => APP_SHORTCUTS.increaseFontSize, run: () => changeFontSize(1) },
       { combo: () => APP_SHORTCUTS.decreaseFontSize, run: () => changeFontSize(-1) },
-      // 은신 모드를 끄면 숨길 가짜 화면이 없으므로 패닉 키도 쓰지 않는다.
-      { combo: () => (settings.stealthMode && settings.panicEnabled ? settings.panicKey : null), run: togglePanic },
     ],
     api.platform,
   )

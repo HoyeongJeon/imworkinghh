@@ -107,6 +107,21 @@ describe('단축키', () => {
     unbind()
   })
 
+  it('두 단축키의 조합이 같으면 목록에서 앞에 있는 것만 실행한다', () => {
+    const ran: string[] = []
+    const unbind = bindShortcuts(
+      window,
+      [
+        { combo: () => 'Mod+W', run: () => ran.push('panic') },
+        { combo: () => APP_SHORTCUTS.closePane, run: () => ran.push('closePane') },
+      ],
+      'win32',
+    )
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', ctrlKey: true }))
+    expect(ran).toEqual(['panic'])
+    unbind()
+  })
+
   it('조합이 꺼져 있으면 단축키가 반응하지 않는다', () => {
     let panicked = 0
     const unbind = bindShortcuts(window, [{ combo: () => null, run: () => panicked++ }], 'win32')
