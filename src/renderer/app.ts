@@ -2,7 +2,7 @@ import type { ImworkingApi } from '../shared/api'
 import { MAX_PANES } from '../shared/panes'
 import { FONT_SIZE_RANGE } from '../shared/settings'
 import type { Settings, ThemeId } from '../shared/types'
-import { backupSetOf, createAutosave } from './autosave'
+import { backupSetOf, createAutosave, guardUnreadBackup } from './autosave'
 import { createCloseHandler } from './close-handler'
 import { createCommandLock } from './command-lock'
 import { createDebouncedTask } from './debounce'
@@ -170,11 +170,16 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   })
   renderPanes()
 
+  const backupFile = guardUnreadBackup({
+    writeBackup: (backup) => api.writeBackup(backup),
+    clearBackup: () => api.clearBackup(),
+  })
+
   const workspace = createWorkspaceCommands({
     panes,
     maxPanes: MAX_PANES,
     onBackupStale: () => void autosave.flushNow(),
-    clearBackup: () => api.clearBackup(),
+    clearBackup: () => backupFile.clearBackup(),
     closeWindowNow: () => api.closeWindowNow(),
   })
 
@@ -278,8 +283,8 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
 
   const autosave = createAutosave({
     takeSnapshot: () => backupSetOf(panes.all().map((pane) => pane.snapshot()), new Date().toISOString()),
-    writeBackup: (backup) => api.writeBackup(backup),
-    clearBackup: () => api.clearBackup(),
+    writeBackup: (backup) => backupFile.writeBackup(backup),
+    clearBackup: () => backupFile.clearBackup(),
   })
 
   const focusedCommands = () => panes.focused().commands
@@ -348,7 +353,11 @@ export async function startApp(api: ImworkingApi, doc: Document): Promise<void> 
   refreshStatus()
   player.start()
 
-  const backup = await api.readBackup()
+  // 백업 파일이 계속 잠겨 있어 읽지 못해도 앱은 시작하고, 복구는 건너뛰되 그 백업은 지우지 않는다.
+  const backup = await api.readBackup().catch(() => {
+    backupFile.keepUntilOverwritten()
+    return null
+  })
   const unsavedCount = backup
     ? panesToRestore(backup.panes, MAX_PANES).filter((pane) => pane.unsavedContent !== null).length
     : 0

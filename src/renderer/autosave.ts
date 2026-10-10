@@ -24,6 +24,25 @@ export function backupSetOf(panes: PaneBackup[], savedAt: string): BackupSet | n
   return unsavedPaneCount(backup) > 0 ? backup : null
 }
 
+export type BackupFile = Pick<AutosaveOptions, 'writeBackup' | 'clearBackup'>
+
+export type GuardedBackupFile = BackupFile & { keepUntilOverwritten(): void }
+
+// 시작할 때 읽지 못한 백업은 사용자의 유일한 사본일 수 있으므로, 그 자리에 새 백업을 쓰기 전에는 지우지 않는다.
+export function guardUnreadBackup(backupFile: BackupFile): GuardedBackupFile {
+  let keeping = false
+  return {
+    async writeBackup(backup) {
+      await backupFile.writeBackup(backup)
+      keeping = false
+    },
+    clearBackup: () => (keeping ? Promise.resolve() : backupFile.clearBackup()),
+    keepUntilOverwritten() {
+      keeping = true
+    },
+  }
+}
+
 const CLEARED = 'cleared'
 type DiskBackup = PaneBackup[] | typeof CLEARED
 

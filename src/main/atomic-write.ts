@@ -9,10 +9,13 @@ export type AtomicWriteFs = {
   rm(path: string, options: { force: boolean }): Promise<void>
 }
 
-export type AtomicWriteOptions = {
-  fs?: AtomicWriteFs
+export type LockedFileRetry = {
   retries?: number
   retryDelayMs?: number
+}
+
+export type AtomicWriteOptions = LockedFileRetry & {
+  fs?: AtomicWriteFs
 }
 
 const defaultFs: AtomicWriteFs = {
@@ -21,13 +24,13 @@ const defaultFs: AtomicWriteFs = {
   rm: (path, options) => nodeFs.rm(path, options),
 }
 
-// Windows에서는 백신이나 검색 색인이 파일을 잠깐 잡고 있으면 교체가 이 코드들로 실패한다.
+// Windows에서는 백신이나 검색 색인이 파일을 잠깐 잡고 있으면 읽기나 교체가 이 코드들로 실패한다.
 const LOCKED_FILE_CODES = new Set(['EPERM', 'EBUSY', 'EACCES'])
 
 export async function writeFileAtomic(
   targetPath: string,
   data: string | Uint8Array,
-  { fs = defaultFs, retries = 5, retryDelayMs = 50 }: AtomicWriteOptions = {},
+  { fs = defaultFs, retries, retryDelayMs }: AtomicWriteOptions = {},
 ): Promise<void> {
   const tempPath = join(
     dirname(targetPath),
@@ -35,24 +38,20 @@ export async function writeFileAtomic(
   )
   try {
     await fs.writeFile(tempPath, data)
-    await renameWithRetry(fs, tempPath, targetPath, retries, retryDelayMs)
+    await retryWhileLocked(() => fs.rename(tempPath, targetPath), { retries, retryDelayMs })
   } catch (error) {
     await fs.rm(tempPath, { force: true }).catch(() => undefined)
     throw error
   }
 }
 
-async function renameWithRetry(
-  fs: AtomicWriteFs,
-  from: string,
-  to: string,
-  retries: number,
-  retryDelayMs: number,
-): Promise<void> {
+export async function retryWhileLocked<T>(
+  task: () => Promise<T>,
+  { retries = 5, retryDelayMs = 50 }: LockedFileRetry = {},
+): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
-      await fs.rename(from, to)
-      return
+      return await task()
     } catch (error) {
       const code = errorCode(error)
       const canRetry = code !== null && LOCKED_FILE_CODES.has(code) && attempt < retries

@@ -1,17 +1,32 @@
-import { mkdir, readFile, rm } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { BackupSet, Eol, PaneBackup } from '../shared/types'
-import { writeFileAtomic } from './atomic-write'
+import { retryWhileLocked, writeFileAtomic } from './atomic-write'
+import { errorCode } from './fs-errors'
 import { createSerialQueue } from './serial-queue'
 
 export type BackupStore = {
   write(backup: BackupSet): Promise<void>
+  // 백업이 없으면 null이다. 다시 시도해도 읽지 못하면 실패를 알린다. 없다고 하면 앱이 백업을 지우기 때문이다.
   read(): Promise<BackupSet | null>
   clear(): Promise<void>
 }
 
-export function createBackupStore(directory: string): BackupStore {
+export type BackupStoreOptions = {
+  readFile?: (path: string) => Promise<string>
+  retryDelayMs?: number
+}
+
+export function createBackupStore(
+  directory: string,
+  { readFile: readBackupFile = (path) => readFile(path, 'utf8'), retryDelayMs }: BackupStoreOptions = {},
+): BackupStore {
   const filePath = join(directory, 'current.json')
+
+  async function moveBrokenFileAside(): Promise<void> {
+    await retryWhileLocked(() => rename(filePath, join(directory, 'current.bad.json')), { retryDelayMs })
+  }
+
   // 저장 직전에 시작된 자동 백업이 저장 뒤의 지우기보다 늦게 끝나면 저장한 글이 백업으로 남으므로 순서대로 처리한다.
   const queue = createSerialQueue()
   return {
@@ -22,13 +37,26 @@ export function createBackupStore(directory: string): BackupStore {
       }),
     read: () =>
       queue.run(async () => {
+        let raw: string
         try {
-          return backupSetFrom(JSON.parse(await readFile(filePath, 'utf8')))
-        } catch {
-          return null
+          raw = await retryWhileLocked(() => readBackupFile(filePath), { retryDelayMs })
+        } catch (error) {
+          if (errorCode(error) === 'ENOENT') return null
+          throw error
         }
+        const backup = parseBackupSet(raw)
+        if (!backup) await moveBrokenFileAside()
+        return backup
       }),
     clear: () => queue.run(() => rm(filePath, { force: true })),
+  }
+}
+
+function parseBackupSet(raw: string): BackupSet | null {
+  try {
+    return backupSetFrom(JSON.parse(raw))
+  } catch {
+    return null
   }
 }
 

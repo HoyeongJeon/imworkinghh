@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AUTOSAVE_INTERVAL_MS, backupSetOf, createAutosave, unsavedPaneCount } from '../../src/renderer/autosave'
+import {
+  AUTOSAVE_INTERVAL_MS,
+  backupSetOf,
+  createAutosave,
+  guardUnreadBackup,
+  unsavedPaneCount,
+} from '../../src/renderer/autosave'
 import type { BackupSet, PaneBackup } from '../../src/shared/types'
 
 beforeEach(() => {
@@ -111,6 +117,48 @@ describe('자동 백업', () => {
     autosave.start()
     autosave.stop()
     await vi.advanceTimersByTimeAsync(AUTOSAVE_INTERVAL_MS * 2)
+    expect(calls).toEqual([])
+  })
+})
+
+describe('읽지 못한 백업 지키기', () => {
+  function setupGuard() {
+    const calls: string[] = []
+    let failWrite = false
+    const backupFile = guardUnreadBackup({
+      writeBackup: async (backup) => {
+        if (failWrite) throw new Error('disk')
+        calls.push(`write ${backup.panes.map((pane) => pane.unsavedContent ?? '-').join('|')}`)
+      },
+      clearBackup: async () => {
+        calls.push('clear')
+      },
+    })
+    return { backupFile, calls, setFailWrite: (fail: boolean) => (failWrite = fail) }
+  }
+
+  it('읽지 못한 백업이 없으면 지우라는 대로 지운다', async () => {
+    const { backupFile, calls } = setupGuard()
+    await backupFile.clearBackup()
+    expect(calls).toEqual(['clear'])
+  })
+
+  it('읽지 못한 백업은 새 백업을 쓰기 전에는 지우지 않는다', async () => {
+    const { backupFile, calls } = setupGuard()
+    backupFile.keepUntilOverwritten()
+    await backupFile.clearBackup()
+    expect(calls).toEqual([])
+    await backupFile.writeBackup(backupOf('새 글'))
+    await backupFile.clearBackup()
+    expect(calls).toEqual(['write 새 글', 'clear'])
+  })
+
+  it('새 백업을 쓰지 못했으면 읽지 못한 백업을 계속 지킨다', async () => {
+    const { backupFile, calls, setFailWrite } = setupGuard()
+    backupFile.keepUntilOverwritten()
+    setFailWrite(true)
+    await expect(backupFile.writeBackup(backupOf('새 글'))).rejects.toThrow('disk')
+    await backupFile.clearBackup()
     expect(calls).toEqual([])
   })
 })

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -68,9 +68,39 @@ describe('자동 백업 저장소', () => {
     await expect(createBackupStore(join(directory, 'backup')).clear()).resolves.toBeUndefined()
   })
 
-  it('깨진 백업 파일은 없는 것으로 본다', async () => {
+  it('형식을 알 수 없는 백업 파일은 옆으로 옮겨 두고 없는 것으로 본다', async () => {
     const backupDirectory = await writeRawBackup('{"content": 1}')
     expect(await createBackupStore(backupDirectory).read()).toBeNull()
+    expect(await readdir(backupDirectory)).toEqual(['current.bad.json'])
+    expect(await readFile(join(backupDirectory, 'current.bad.json'), 'utf8')).toBe('{"content": 1}')
+  })
+
+  it('JSON이 아닌 백업 파일은 옆으로 옮겨 두고 없는 것으로 본다', async () => {
+    const backupDirectory = await writeRawBackup('{"savedAt": "2026-10-08')
+    expect(await createBackupStore(backupDirectory).read()).toBeNull()
+    expect(await readdir(backupDirectory)).toEqual(['current.bad.json'])
+  })
+
+  it('백업 파일이 잠깐 잠겨 있으면 다시 시도해서 읽는다', async () => {
+    const codes = ['EBUSY', 'EPERM']
+    const readBackupFile = async () => {
+      const code = codes.shift()
+      if (code) throw Object.assign(new Error(code), { code })
+      return JSON.stringify(sampleBackup)
+    }
+    const store = createBackupStore(join(directory, 'backup'), { readFile: readBackupFile, retryDelayMs: 0 })
+    expect(await store.read()).toEqual(sampleBackup)
+  })
+
+  it('백업 파일이 계속 잠겨 있으면 백업이 없다고 하지 않고 실패를 알린다', async () => {
+    let attempts = 0
+    const readBackupFile = async () => {
+      attempts++
+      throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' })
+    }
+    const store = createBackupStore(join(directory, 'backup'), { readFile: readBackupFile, retryDelayMs: 0 })
+    await expect(store.read()).rejects.toMatchObject({ code: 'EBUSY' })
+    expect(attempts).toBe(6)
   })
 
   it('칸 목록이 비었거나 칸 정보가 틀린 백업은 없는 것으로 본다', async () => {
