@@ -25,6 +25,10 @@ function setup(initialText = '# 제목', display = { fontSize: 14, lineNumbersVi
   return { editor, parent, view, changeNotices, cursorPositions, typedCount: () => typedCount }
 }
 
+function pressKey(view: EditorView, key: KeyboardEventInit) {
+  view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...key }))
+}
+
 describe('글쓰기 에디터', () => {
   it('처음 받은 글을 보여 준다', () => {
     expect(setup('# 회의록').editor.getText()).toBe('# 회의록')
@@ -122,6 +126,31 @@ describe('글쓰기 에디터', () => {
     const { view } = setup('', { fontSize: 20, lineNumbersVisible: false })
     expect(getComputedStyle(view().dom).fontSize).toBe('20px')
     expect(view().dom.querySelector('.cm-visual-line-numbers')).toBeNull()
+  })
+
+  it('Ctrl+F를 누르면 찾기 창이 열린다', () => {
+    const { view } = setup()
+    pressKey(view(), { key: 'f', ctrlKey: true })
+    expect(view().dom.querySelector('.cm-search')).not.toBeNull()
+  })
+
+  it('찾기 창에서 모두 바꾸면 사용자가 입력한 것으로 친다', () => {
+    const { editor, view, typedCount } = setup('고양이와 고양이')
+    pressKey(view(), { key: 'f', ctrlKey: true })
+    const panel = view().dom.querySelector('.cm-search') as HTMLElement
+    const field = (name: string) => panel.querySelector(`[name=${name}]`) as HTMLInputElement
+    field('search').value = '고양이'
+    field('replace').value = '강아지'
+    field('replace').dispatchEvent(new Event('change'))
+    field('replaceAll').click()
+    expect(editor.getText()).toBe('강아지와 강아지')
+    expect(typedCount()).toBe(1)
+  })
+
+  it('줄 이동 키를 누르면 아무 창도 열리지 않는다', () => {
+    const { view } = setup()
+    pressKey(view(), { key: 'g', ctrlKey: true, altKey: true })
+    expect(view().dom.querySelector('.cm-panel')).toBeNull()
   })
 
   it('없애면 에디터가 화면에서 사라진다', () => {

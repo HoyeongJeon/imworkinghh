@@ -2,6 +2,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
+import { gotoLine, search, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import { EditorView, GutterMarker, drawSelection, gutter, highlightActiveLine, keymap } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
@@ -50,6 +51,9 @@ function highlightExtensions(enabled: boolean): Extension {
   if (!enabled) return []
   return [markdown({ base: markdownLanguage, codeLanguages: languages }), syntaxHighlighting(markdownHighlightStyle)]
 }
+
+// 줄 이동은 문서의 실제 줄 기준이라, 화면 줄마다 매긴 줄 번호와 달라 헷갈린다.
+const searchKeymapWithoutGotoLine = searchKeymap.filter((binding) => binding.run !== gotoLine)
 
 function fontSizeTheme(px: number): Extension {
   return EditorView.theme({ '&': { fontSize: `${px}px` } })
@@ -135,7 +139,8 @@ export function createEditor(options: EditorOptions): Editor {
         drawSelection(),
         highlightActiveLine(),
         EditorView.lineWrapping,
-        keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+        search(),
+        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymapWithoutGotoLine, indentWithTab]),
         highlightCompartment.of(highlightExtensions(syntaxHighlightEnabled)),
         fontSizeCompartment.of(fontSizeTheme(fontSizePx)),
         notifyChanges,

@@ -302,6 +302,62 @@ body {
   background: var(--color-selection) !important;
 }
 
+/* 찾기/바꾸기 창 */
+#editor .cm-panels {
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+#editor .cm-panels-bottom {
+  border-top: 1px solid var(--color-divider);
+}
+
+#editor .cm-textfield,
+#editor .cm-button {
+  background: transparent;
+  color: inherit;
+  border: 1px solid var(--color-divider);
+  border-radius: 0;
+  font: inherit;
+  font-size: 85%;
+}
+
+#editor .cm-textfield:focus {
+  outline: none;
+  border-color: var(--color-cursor);
+}
+
+#editor .cm-button:hover {
+  border-color: var(--color-muted);
+}
+
+#editor .cm-panel.cm-search [name='close'] {
+  top: 4px;
+  right: 4px;
+  padding: 2px 6px;
+  color: var(--color-muted);
+  font-size: 140%;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#editor .cm-panel.cm-search [name='close']:hover {
+  color: var(--color-foreground);
+}
+
+#editor .cm-panel.cm-search input[type='checkbox'] {
+  accent-color: var(--color-cursor);
+}
+
+#editor .cm-searchMatch {
+  background: transparent;
+  outline: 1px solid var(--color-muted);
+}
+
+#editor .cm-searchMatch-selected {
+  background: var(--color-selection);
+}
+
 /* 상태바 */
 #statusbar {
   display: flex;
